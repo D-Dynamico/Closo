@@ -2,161 +2,71 @@
 
 Every accuracy number Closo reports is measured against the ground truth
 this module writes, so it is built before the matcher rather than
-alongside it. Three properties matter more than realism:
+alongside it.
 
 **Determinism.** One seeded ``random.Random`` instance, never the global
-module. Same seed, byte-identical CSVs (12.1).
+module, and a fixed build order. Same seed, byte-identical files (12.1).
+Reordering the class builders changes the RNG stream and so changes every
+generated value, which would break the frozen demo set while the code
+still looked correct.
 
-**Exact taxonomy.** The counts in :data:`PAYMENT_CLASS_COUNTS` are the
-contract. A generator that produced "roughly" the right mix would make
-every per-class metric on the scorecard unfalsifiable.
-
-**Honest unresolvables.** E9 and E10 must be genuinely impossible, not
-merely hard. :func:`verify_unresolvable` brute-forces that rather than
-trusting the construction, because an accidentally-solvable E10 would
-break the honest-exception-list story with no visible symptom.
-
-The pipeline never reads ``ground_truth.json``; only ``metrics.py`` may,
-and only after a run completes (11.4).
+The taxonomy, settlement arithmetic and the E10 guard live in
+``taxonomy.py``; file layout lives in ``dataset_io.py``.
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
-import json
-import random
-from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 from closo.config import (
+    DATA_DIR,
     DEMO_SEED,
     FEE_CUTOVER_DATE,
     FEE_SCHEDULES,
-    PASS_C_TOLERANCE,
     PAYMENT_METHODS,
     ZERO,
     FeeSchedule,
     active_schedule,
     add_business_days,
     gst_on,
+    previous_business_day,
     money,
 )
+from closo.dataset_io import write_batch
 from closo.schemas import BankTxn, Order, Payment, Settlement
-
-# --------------------------------------------------------------------------
-# Taxonomy (CLAUDE.md 5.2)
-# --------------------------------------------------------------------------
-
-TOTAL_PAYMENTS = 150
-
-#: Payments seeded into each error class. E1 is the remainder, so the total
-#: is exactly TOTAL_PAYMENTS by construction rather than by luck.
-PAYMENT_CLASS_COUNTS: dict[str, int] = {
-    "E2": 8,   # settlement lag
-    "E3": 5,   # partial refund netted
-    "E4": 4,   # fee schedule mismatch
-    "E5": 3,   # split settlement
-    "E6": 2,   # duplicate UTR
-    "E7": 4,   # rounding drift
-    "E8": 2,   # missing UTR in narration
-    "E9": 2,   # genuinely missing settlement
-}
-PAYMENT_CLASS_COUNTS["E1"] = TOTAL_PAYMENTS - sum(PAYMENT_CLASS_COUNTS.values())
-
-#: E10 is a bank credit with no Razorpay counterpart, so it seeds no payments.
-E10_COUNT = 2
-
-#: Payments per settlement, by class. Chosen so the batch rolls into ~40
-#: settlements while keeping each settlement class-homogeneous - a mixed
-#: settlement would make its ground-truth error class ambiguous.
-PAYMENTS_PER_SETTLEMENT: dict[str, int] = {
-    "E1": 5, "E2": 2, "E3": 1, "E4": 2, "E5": 3,
-    "E6": 1, "E7": 2, "E8": 1, "E9": 1,
-}
-
-WINDOW_START = date(2026, 2, 2)
-WINDOW_END = date(2026, 4, 24)
-
-BANK_CODES = ("SBIN", "HDFC", "ICIC", "UTIB", "KKBK")
-
-NARRATION_TEMPLATES = (
-    "NEFT-RAZORPAYSOFTWARE-{utr}-SETTLEMENT",
-    "NEFT/RAZORPAY SOFTWARE PVT/{utr}/CR",
-    "RTGS-{utr}-RAZORPAY-COLLECTION",
-    "IMPS REF {utr} RAZORPAY",
-    "NEFT  RAZORPAYSOFTWARE  {utr}  CR",
+from closo.taxonomy import (
+    BANK_CODES,
+    CHANNELS,
+    CUTOVER_PAYMENTS,
+    E10_COUNT,
+    NARRATION_TEMPLATES,
+    PAYMENT_CLASS_COUNTS,
+    PAYMENTS_PER_SETTLEMENT,
+    SKUS,
+    TRUNCATED_NARRATION_TEMPLATES,
+    WINDOW_END,
+    WINDOW_START,
+    GeneratedBatch,
+    settlement_math,
+    verify_unresolvable,
 )
 
-#: Narrations for E8: the UTR is truncated below the 16-character minimum,
-#: so config.normalize_utr refuses to parse it rather than prefix-matching.
-TRUNCATED_NARRATION_TEMPLATES = (
-    "NEFT-RAZORPAYSOFTWARE-{stub}-SETTLEMENT",
-    "NEFT/RAZORPAY/{stub}/CR",
-)
-
-SKUS = ("SKU-KEYBOARD", "SKU-MOUSE", "SKU-MONITOR", "SKU-DOCK", "SKU-CABLE")
-CHANNELS = ("web", "app", "marketplace")
-
-
-@dataclass
-class GeneratedBatch:
-    """One complete synthetic dataset plus the truth about it."""
-
-    payments: list[Payment] = field(default_factory=list)
-    settlements: list[Settlement] = field(default_factory=list)
-    bank_txns: list[BankTxn] = field(default_factory=list)
-    orders: list[Order] = field(default_factory=list)
-    ground_truth: dict = field(default_factory=dict)
-
-
-# --------------------------------------------------------------------------
-# Money helpers
-# --------------------------------------------------------------------------
-
-
-def settlement_math(
-    payments: list[Payment],
-    schedule: FeeSchedule,
-    rounding: Decimal = ZERO,
-) -> tuple[Decimal, Decimal, Decimal, Decimal]:
-    """Compute (gross, mdr, gst, net) for a batch of payments.
-
-    Gross is net of refunds because a refunded payment settles for less,
-    while MDR is charged on the original gross - the processor keeps its
-    fee on a refunded transaction. GST is computed and quantized per fee
-    row, then summed, so the total is reproducible row by row (12.1).
-    """
-    gross = money(sum((p.net_of_refund for p in payments), ZERO))
-    mdr = ZERO
-    gst = ZERO
-    for payment in payments:
-        row_mdr = schedule.mdr_for(payment.method, payment.amount_gross)
-        mdr = money(mdr + row_mdr)
-        gst = money(gst + gst_on(row_mdr))
-    net = money(gross - mdr - gst + rounding)
-    return gross, mdr, gst, net
-
-
-# --------------------------------------------------------------------------
-# Generator
-# --------------------------------------------------------------------------
+import random
 
 
 class Generator:
-    """Builds one deterministic batch.
-
-    All randomness flows through ``self.rng``. Touching the global
-    ``random`` module anywhere in here silently breaks the determinism
-    guarantee, which is the whole basis of the replay demo.
-    """
+    """Builds one deterministic batch."""
 
     def __init__(self, seed: int = DEMO_SEED) -> None:
         self.rng = random.Random(seed)
         self.seed = seed
+        self.batch = GeneratedBatch()
         self._utrs_issued: set[str] = set()
+        self._pending_orders: list[Order] = []
+        self._missing: dict[str, dict] = {}
         self._counter = 0
 
     # -- primitives --------------------------------------------------------
@@ -191,39 +101,33 @@ class Generator:
             day += timedelta(days=1)
         return day
 
-    def _narration(self, utr: str) -> str:
-        return self.rng.choice(NARRATION_TEMPLATES).format(utr=utr)
-
     # -- record construction ----------------------------------------------
 
     def _make_payment(
-        self,
-        captured_at: date,
-        method: str | None = None,
-        low: int = 500,
-        high: int = 50_000,
-    ) -> tuple[Payment, Order]:
-        """One payment and the internal order row behind it."""
+        self, captured_at: date, method: str | None = None
+    ) -> Payment:
+        """One payment plus the internal order row behind it."""
         order_id = self._next_id("ord")
         payment_id = self._next_id("pay")
-        gross = self._amount(low, high)
+        gross = self._amount()
         chosen = method or self.rng.choice(PAYMENT_METHODS)
 
-        payment = Payment(
+        self._pending_orders.append(
+            Order(
+                order_id=order_id,
+                sku=self.rng.choice(SKUS),
+                order_amount=gross,
+                order_date=captured_at,
+                channel=self.rng.choice(CHANNELS),
+            )
+        )
+        return Payment(
             payment_id=payment_id,
             order_id=order_id,
             amount_gross=gross,
             method=chosen,
             captured_at=captured_at,
         )
-        order = Order(
-            order_id=order_id,
-            sku=self.rng.choice(SKUS),
-            order_amount=gross,
-            order_date=captured_at,
-            channel=self.rng.choice(CHANNELS),
-        )
-        return payment, order
 
     def _settle(
         self,
@@ -241,13 +145,14 @@ class Generator:
 
         for payment in payments:
             row_mdr = applied.mdr_for(payment.method, payment.amount_gross)
+            row_gst = gst_on(row_mdr)
             payment.settlement_id = settlement_id
             payment.settlement_utr = settlement_utr
             payment.settled_at = settled_at
             payment.fee_mdr = row_mdr
-            payment.fee_gst = gst_on(row_mdr)
+            payment.fee_gst = row_gst
             payment.amount_settled = money(
-                payment.net_of_refund - row_mdr - gst_on(row_mdr)
+                payment.net_of_refund - row_mdr - row_gst
             )
 
         return Settlement(
@@ -269,88 +174,344 @@ class Generator:
         amount: Decimal,
         value_date: date | None = None,
         narration: str | None = None,
-        utr: str | None = None,
+        utr: str | None = "",
     ) -> BankTxn:
-        """One bank credit line for a settlement."""
+        """One bank credit line for a settlement.
+
+        ``utr=""`` means "use the settlement's"; an explicit None means the
+        narration yielded nothing parseable (E8).
+        """
         landed = value_date or self._business_day(settlement.settled_at)
-        parsed_utr = settlement.utr if utr is None else utr
+        parsed = settlement.utr if utr == "" else utr
         return BankTxn(
             bank_txn_id=self._next_id("bt"),
             txn_date=landed,
             value_date=landed,
-            narration=narration or self._narration(settlement.utr),
-            utr=parsed_utr,
+            narration=narration
+            or self.rng.choice(NARRATION_TEMPLATES).format(utr=settlement.utr),
+            utr=parsed,
             credit_amount=amount,
         )
 
+    # -- bookkeeping -------------------------------------------------------
 
-# --------------------------------------------------------------------------
-# Unresolvability guard (E10)
-# --------------------------------------------------------------------------
+    def _group(self, error_class: str, reserve: int = 0) -> list[list[Payment]]:
+        """Split this class's payments into settlement-sized groups."""
+        count = PAYMENT_CLASS_COUNTS[error_class] - reserve
+        size = PAYMENTS_PER_SETTLEMENT[error_class]
+        payments = [self._make_payment(self._capture_date()) for _ in range(count)]
+        return [payments[i : i + size] for i in range(0, len(payments), size)]
+
+    def _settled_on(self, group: list[Payment]) -> date:
+        """A plausible settlement date: T+1 business day after last capture."""
+        latest = max(p.captured_at for p in group)
+        return self._business_day(add_business_days(latest, 1))
+
+    def _record(
+        self,
+        credit: BankTxn,
+        error_class: str,
+        payment_ids: list[str],
+        resolution: str,
+        settlement_id: str | None = None,
+    ) -> None:
+        """Register one bank credit in ground truth. Exactly once, always."""
+        assert credit.bank_txn_id not in self.batch.ground_truth
+        self.batch.ground_truth[credit.bank_txn_id] = {
+            "source_payment_ids": payment_ids,
+            "settlement_id": settlement_id,
+            "error_class": error_class,
+            "true_resolution": resolution,
+        }
+
+    def _commit(
+        self,
+        group: list[Payment],
+        settlement: Settlement,
+        credits: list[BankTxn],
+        error_class: str,
+        resolution: str,
+    ) -> None:
+        """Append one class's records and register its credits."""
+        self.batch.payments.extend(group)
+        self.batch.settlements.append(settlement)
+        self.batch.bank_txns.extend(credits)
+        for credit in credits:
+            self._record(
+                credit,
+                error_class,
+                settlement.payment_ids,
+                resolution,
+                settlement.settlement_id,
+            )
+
+    # -- per-class builders ------------------------------------------------
+
+    def _build_simple(
+        self,
+        error_class: str,
+        resolution: str,
+        *,
+        reserve: int = 0,
+        schedule: FeeSchedule | None = None,
+        rounding_drift: bool = False,
+        lag_days: int = 0,
+        truncate_utr: bool = False,
+    ) -> None:
+        """Build a class whose settlements each produce one bank credit.
+
+        Covers E1 and the variations differing only in how the credit or the
+        settlement is perturbed: a late value date (E2), an applied schedule
+        that is not the active one (E4), a paisa or two of drift (E7), or a
+        narration with no parseable UTR (E8).
+        """
+        for group in self._group(error_class, reserve):
+            settled_at = self._settled_on(group)
+            drift = ZERO
+            if rounding_drift:
+                drift = money(self.rng.choice(("1.00", "-1.00", "2.00", "-1.50")))
+
+            settlement = self._settle(group, settled_at, schedule, drift)
+
+            value_date = self._business_day(settled_at)
+            if lag_days:
+                value_date = add_business_days(settled_at, lag_days)
+
+            narration = None
+            parsed_utr: str | None = ""
+            if truncate_utr:
+                narration = self.rng.choice(TRUNCATED_NARRATION_TEMPLATES).format(
+                    stub=settlement.utr[:10]
+                )
+                parsed_utr = None
+
+            credit = self._credit(
+                settlement,
+                settlement.amount_settled,
+                value_date=value_date,
+                narration=narration,
+                utr=parsed_utr,
+            )
+            self._commit(group, settlement, [credit], error_class, resolution)
+
+    def _build_refunds(self) -> None:
+        """E3 - a partial refund netted into the settlement.
+
+        Nothing in the bank narration says why the credit is small. That is
+        the point: the investigator has to go and find the refund.
+        """
+        for group in self._group("E3"):
+            for payment in group:
+                payment.refund_amount = money(
+                    payment.amount_gross * Decimal("0.25")
+                )
+                payment.status = "partial_refund"
+
+            settlement = self._settle(group, self._settled_on(group))
+            credit = self._credit(settlement, settlement.amount_settled)
+            self._commit(
+                group, settlement, [credit], "E3",
+                "partial refund netted into the settlement",
+            )
+
+    def _build_splits(self) -> None:
+        """E5 - one settlement paid out across two bank credits.
+
+        The legs are deliberately uneven. A clean half-and-half split would
+        let a matcher guess the pairing from the amounts alone, and the class
+        would prove nothing.
+        """
+        for group in self._group("E5"):
+            settled_at = self._settled_on(group)
+            settlement = self._settle(group, settled_at)
+
+            first = money(settlement.amount_settled * Decimal("0.4"))
+            second = money(settlement.amount_settled - first)
+            assert money(first + second) == settlement.amount_settled
+
+            legs = [
+                self._credit(settlement, first),
+                self._credit(
+                    settlement, second,
+                    value_date=add_business_days(settled_at, 1),
+                ),
+            ]
+            self._commit(
+                group, settlement, legs, "E5",
+                "split settlement: two bank credits sum to one settlement net",
+            )
+
+    def _build_duplicate_utr(self) -> None:
+        """E6 - two different settlements carrying the same UTR.
+
+        Pass A must refuse a UTR join yielding two candidates rather than
+        picking one (12.2). Amounts differ so the duplication is unambiguous
+        in the data even though the join is not.
+        """
+        shared_utr = self._utr()
+        credits: list[BankTxn] = []
+        for group in self._group("E6"):
+            settlement = self._settle(
+                group, self._settled_on(group), utr=shared_utr
+            )
+            credit = self._credit(settlement, settlement.amount_settled)
+            credits.append(credit)
+            self._commit(
+                group, settlement, [credit], "E6",
+                "duplicate UTR shared by two settlements",
+            )
+        amounts = {c.credit_amount for c in credits}
+        assert len(amounts) == len(credits), "E6 credits must differ in amount"
+
+    # -- designed unresolvables -------------------------------------------
+
+    def _build_missing_settlements(self) -> None:
+        """E9 - the money genuinely never arrived.
+
+        Recorded under a separate key because ground truth is indexed by
+        bank transaction and an E9 has none, which is precisely the point.
+        """
+        for group in self._group("E9"):
+            settlement = self._settle(group, self._settled_on(group))
+            self.batch.payments.extend(group)
+            self.batch.settlements.append(settlement)
+            self._missing[settlement.settlement_id] = {
+                "source_payment_ids": settlement.payment_ids,
+                "error_class": "E9",
+                "expected_amount": str(settlement.amount_settled),
+                "true_resolution": (
+                    "settlement genuinely absent from the bank statement - "
+                    "raise with Razorpay support"
+                ),
+            }
+
+    def _build_cutover_boundary(self) -> None:
+        """Clean settlements pinned to the fee-schedule boundary (12.1).
+
+        One lands exactly on the cutover (v2), one the day before (v1). The
+        boundary is where an off-by-one-day bug lives, and without records
+        sitting on it the verifier's schedule check is never exercised.
+        These are still E1 - clean matches that happen to sit on the edge -
+        and their payments come out of E1's allocation.
+        """
+        per_settlement = CUTOVER_PAYMENTS // 2
+        for settled_at in (
+            FEE_CUTOVER_DATE,
+            previous_business_day(FEE_CUTOVER_DATE),
+        ):
+            group = [
+                self._make_payment(settled_at - timedelta(days=3), method="card")
+                for _ in range(per_settlement)
+            ]
+            settlement = self._settle(group, settled_at)
+            credit = self._credit(settlement, settlement.amount_settled)
+            self._commit(
+                group, settlement, [credit], "E1",
+                f"clean match on the {settlement.fee_schedule} boundary",
+            )
+
+    def _build_foreign_credits(self) -> None:
+        """E10 - a bank credit with no Razorpay counterpart.
+
+        Each candidate is checked against every settlement under both fee
+        schedules and redrawn on collision. Constructing something to be
+        unmatchable is not the same as it being unmatchable.
+        """
+        by_id = self.batch.payments_by_id()
+        for _ in range(E10_COUNT):
+            for _attempt in range(200):
+                candidate = BankTxn(
+                    bank_txn_id=self._next_id("bt"),
+                    txn_date=self._business_day(self._capture_date()),
+                    value_date=self._business_day(self._capture_date()),
+                    narration=f"NEFT-INWARD-{self._utr()}-VENDOR REFUND",
+                    utr=None,
+                    credit_amount=self._amount(low=1_000, high=90_000),
+                )
+                if verify_unresolvable(candidate, self.batch.settlements, by_id):
+                    break
+            else:  # pragma: no cover - 200 consecutive collisions is implausible
+                raise RuntimeError(
+                    "could not draw an unresolvable E10 amount in 200 attempts"
+                )
+
+            self.batch.bank_txns.append(candidate)
+            self._record(
+                candidate, "E10", [],
+                "foreign credit with no Razorpay counterpart - escalate",
+            )
+
+    # -- orchestration -----------------------------------------------------
+
+    def build(self) -> GeneratedBatch:
+        """Generate the full batch. Build order is fixed; see module docs."""
+        self._build_simple(
+            "E1", "clean straight-through match", reserve=CUTOVER_PAYMENTS
+        )
+        self._build_simple("E2", "settlement lag: credit lands T+3", lag_days=3)
+        self._build_refunds()
+        self._build_simple(
+            "E4",
+            "fee schedule v1 applied to a settlement the cutover puts on v2",
+            schedule=FEE_SCHEDULES["v1"],
+        )
+        self._build_splits()
+        self._build_duplicate_utr()
+        self._build_simple(
+            "E7", "rounding drift within tolerance", rounding_drift=True
+        )
+        self._build_simple(
+            "E8", "no parseable UTR in the narration", truncate_utr=True
+        )
+        self._build_missing_settlements()
+        self._build_cutover_boundary()
+        self._build_foreign_credits()
+
+        self.batch.missing_settlements = self._missing
+        self.batch.orders = self._pending_orders
+        self.batch.bank_txns.sort(key=lambda b: (b.value_date, b.bank_txn_id))
+        self._stamp_expected_settlements()
+        return self.batch
+
+    def _stamp_expected_settlements(self) -> None:
+        """Fill each order's expected settlement from its payment's leg.
+
+        Left blank where the payment never settled, so an E9 order shows an
+        expectation that was never met rather than a fabricated figure.
+        """
+        by_order = {p.order_id: p for p in self.batch.payments}
+        for order in self.batch.orders:
+            payment = by_order.get(order.order_id)
+            if payment is not None and payment.amount_settled is not None:
+                order.expected_settlement = payment.amount_settled
 
 
-def verify_unresolvable(
-    credit: BankTxn,
-    settlements: list[Settlement],
-    payments_by_id: dict[str, Payment],
-    tolerance: Decimal = PASS_C_TOLERANCE,
-) -> bool:
-    """True if ``credit`` matches no settlement under any fee schedule.
-
-    Brute force on purpose. E10 is meant to be genuinely unresolvable, and
-    "we constructed it that way" is not evidence - a random amount can
-    collide with a real settlement net by chance, and the resulting E10
-    would be quietly resolvable while every test still passed. This checks
-    the recomputation Layer 1's Pass C would actually perform, against both
-    schedules, for every settlement in the batch.
-    """
-    for settlement in settlements:
-        members = [
-            payments_by_id[pid]
-            for pid in settlement.payment_ids
-            if pid in payments_by_id
-        ]
-        if not members:
-            continue
-        for schedule in FEE_SCHEDULES.values():
-            _, _, _, net = settlement_math(members, schedule)
-            if abs(credit.credit_amount - net) <= tolerance:
-                return False
-        if abs(credit.credit_amount - settlement.amount_settled) <= tolerance:
-            return False
-    return True
+def generate(seed: int = DEMO_SEED) -> GeneratedBatch:
+    """Build one batch for ``seed``."""
+    return Generator(seed).build()
 
 
-# --------------------------------------------------------------------------
-# CSV / JSON output
-# --------------------------------------------------------------------------
+def main(argv: list[str] | None = None) -> int:
+    """Entry point: ``python -m closo.generator --seed 42 --out DIR``."""
+    parser = argparse.ArgumentParser(description="Generate Closo's synthetic batch")
+    parser.add_argument("--seed", type=int, default=DEMO_SEED)
+    parser.add_argument("--out", type=Path, default=None)
+    args = parser.parse_args(argv)
 
-PAYMENT_COLUMNS = [
-    "payment_id", "order_id", "amount_gross", "method", "captured_at",
-    "settlement_id", "settlement_utr", "settled_at", "fee_mdr", "fee_gst",
-    "amount_settled", "status", "refund_amount",
-]
-BANK_COLUMNS = ["txn_date", "value_date", "narration", "utr", "credit_amount", "balance"]
-ORDER_COLUMNS = ["order_id", "sku", "order_amount", "order_date", "channel", "expected_settlement"]
-SETTLEMENT_COLUMNS = [
-    "settlement_id", "utr", "settled_at", "payment_ids", "amount_gross",
-    "fee_mdr", "fee_gst", "amount_settled", "fee_schedule", "rounding",
-]
+    out_dir = args.out or (DATA_DIR / f"seed_{args.seed}")
+    batch = generate(args.seed)
+    write_batch(batch, out_dir, args.seed)
 
-
-def _cell(value: object) -> str:
-    """Render one CSV cell. Amounts stay strings; None becomes empty."""
-    if value is None:
-        return ""
-    if isinstance(value, list):
-        return "|".join(str(v) for v in value)
-    return str(value)
+    counts = batch.class_counts()
+    print(f"seed {args.seed} -> {out_dir}")
+    print(
+        f"  {len(batch.payments)} payments, {len(batch.settlements)} settlements, "
+        f"{len(batch.bank_txns)} bank credits, {len(batch.orders)} orders"
+    )
+    print("  " + "  ".join(f"{k}={counts[k]}" for k in sorted(counts)))
+    print(f"  {len(batch.missing_settlements)} settlements with no bank credit (E9)")
+    return 0
 
 
-def write_csv(path: Path, columns: list[str], rows: list[dict]) -> None:
-    """Write a CSV with LF endings so hashes match across platforms."""
-    with path.open("w", newline="\n", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({c: _cell(row.get(c)) for c in columns})
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

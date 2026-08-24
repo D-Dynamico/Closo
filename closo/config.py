@@ -158,7 +158,12 @@ FEE_SCHEDULES: Mapping[str, FeeSchedule] = {
 }
 
 # Settlements on or after this date use v2. On the cutover itself: v2.
-FEE_CUTOVER_DATE = date(2026, 3, 1)
+#
+# Deliberately a Monday. Section 12.1 requires a settlement landing exactly
+# on the cutover, and banks do not settle at weekends - a cutover on a
+# Saturday or Sunday is a boundary no record can ever sit on, so the
+# verifier's fee-schedule check would never be exercised by real data.
+FEE_CUTOVER_DATE = date(2026, 3, 2)
 
 
 def active_schedule(settled_at: date) -> FeeSchedule:
@@ -245,6 +250,19 @@ def normalize_utr(narration: str | None) -> str | None:
 
 SETTLEMENT_WINDOW_BUSINESS_DAYS = 3
 PASS_C_TOLERANCE = Decimal("2.00")  # inclusive; Rs 2.01 is an exception
+
+
+def previous_business_day(start: date) -> date:
+    """The last business day strictly before ``start``.
+
+    Used to place a settlement just short of the fee cutover. A plain
+    ``start - 1 day`` can land on a Saturday, and a settlement dated to a
+    weekend is not something a bank would ever produce.
+    """
+    current = start - timedelta(days=1)
+    while current.weekday() >= 5:
+        current -= timedelta(days=1)
+    return current
 
 
 def add_business_days(start: date, days: int) -> date:
