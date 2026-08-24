@@ -113,9 +113,15 @@ Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARC
 
 ## Status
 
-Stages 0–3 complete (scaffold, schemas/config, generator + frozen dataset, Layer 1).
-193 tests passing, offline. Next: **Stage 4** — SQLite audit log with append-only trigger,
-`pipeline.run()` on Layer 1 only, Streamlit Ingest + Scorecard on real numbers.
+Stages 0–4 complete. 245 tests passing, offline. **There is a demoable product from here
+on** — `streamlit run app/streamlit_app.py`, press Run reconciliation, see the Scorecard;
+Replay rebuilds it from the audit log with no network at all.
+
+Seed 42: 47 credits, 83.0% match rate, 100% verified accuracy, ₹3.82M reconciled /
+₹294K stuck, 2 correct escalations and 6 false ones (all awaiting Layer 2).
+
+Next: **Stage 5** — tools and the verifier. The verifier is built *before* the
+investigator: the checker must exist before the thing it checks.
 
 Two open items carried forward, detailed in the newest `docs/sessions/` note: the **E4 spec
 conflict** between §5.2 and §8.3 — the verifier as specified would reject the only correct E4

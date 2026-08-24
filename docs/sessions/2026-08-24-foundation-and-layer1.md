@@ -214,3 +214,68 @@ number to its file. This log became a dated note. `README.md` written properly. 
   **Lesson worth keeping: mutate the docs the same way we mutate the code.**
 
 **Open:** unchanged — the E4 spec conflict (§5.2 vs §8.3) and E5/E6 sharing `duplicate_utr`.
+
+---
+
+## Stage 4 — Audit log, pipeline, Ingest + Scorecard — 2026-08-24
+
+**Done:** `closo/audit.py` (SQLite, append-only by trigger), `closo/pipeline.py`
+(`run()`, `replay()`), `closo/metrics.py` (scorecard, the only module reading ground
+truth), and the live Ingest + Scorecard screens. 49 new tests; full suite **245 passing**.
+
+**Numbers on seed 42:** 47 credits · 83.0% match rate · **100% verified accuracy** ·
+₹3,821,626.13 reconciled / ₹293,978.44 stuck (sums exactly to all credits) ·
+2 correct escalations · 6 false escalations, all pending Layer 2 · ~52,000 records/min.
+
+**Decisions:**
+
+- **`events` is append-only enforced by SQLite triggers, not convention.** Replay reads
+  straight out of this table. If a row could be rewritten afterwards, a replay would stop
+  being evidence of what happened and become a story about it. A rule people agree to
+  follow gets broken in a demo-day scramble; one the database refuses to break does not.
+
+- **Unmatched credits are ESCALATED with a "pending Layer 2" note, not dropped or
+  optimistically resolved.** A pipeline that hides its unfinished half produces a scorecard
+  that flatters itself — the exact failure this project argues against.
+
+- **`pending_investigation` is reported *alongside* `false_escalations`, never subtracted.**
+  The six E4/E5/E6 cases are genuinely unresolved. A metric that discounts its own gaps has
+  stopped being a measurement.
+
+- **`replay()` does not re-execute the cascade.** If the network dies on stage, a replay
+  must be the same run played back, not a second run that might disagree. A missing run
+  raises `KeyError` — an empty scorecard renders as "resolved nothing", which reads as
+  catastrophe rather than a lookup failure.
+
+- **`stable_dict()` drops only run id and timing** for the determinism diff. Every measured
+  quantity stays in, or the determinism test would pass by comparing nothing.
+
+**Surprises:**
+
+- **The audit log's SQLite connection was not thread-safe, and the boot check missed it
+  entirely.** Streamlit re-executes the script on a *different thread* per interaction, so
+  the connection cached with `cache_resource` raised `ProgrammingError` on the first click
+  of Run reconciliation. The page loaded fine — the failure waited behind a button. Found
+  only by driving the UI with `AppTest`. **Lesson: HTTP 200 proves the server started and
+  nothing else.**
+
+- **The Replay button did not replay.** It set session state and stopped. Worse than no
+  button: it looks like a working escape hatch right up to the moment you need one. Now
+  genuinely rebuilds from the audit log, verified to reproduce the live scorecard.
+
+- **Two tests could not fail** — same shape as the toothless doc guard last session.
+  `false_resolutions == 0` is equally true when the detector is broken and never
+  increments; disabling detection passed cleanly. And comparing statuses to bank_txns as
+  two sets agrees with itself if both shrink together. Fixed with positive tests: force an
+  E10 to resolved and assert it's caught; pin the count to disk and lean on the money
+  cross-check. **Mutation testing has now found a broken test in three consecutive stages.**
+
+- `use_container_width` is deprecated in Streamlit and disappears after 2025-12-31.
+
+**Open:**
+
+- **E4 spec conflict** (§5.2 vs §8.3) — decide in Stage 5, now imminent.
+- E5/E6 both surface as `duplicate_utr`, distinguishable only by the detail string.
+- Next: **Stage 5** — tools + verifier. Verifier *before* investigator: the checker must
+  exist before the thing it checks. `test_verifier.py` is the most important test file in
+  the repo; hand-craft the verdict fixtures, do not generate them with an LLM.
