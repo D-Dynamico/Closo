@@ -291,7 +291,119 @@ class GeminiClient:
         tools: Sequence[dict[str, Any]],
         force_tool: str | None,
     ) -> LLMResponse:
-        """Issue the actual request. Wired in Stage 6."""
-        raise NotImplementedError(
-            "GeminiClient._call_api lands in Stage 6 with the investigator"
+        """Issue the request and normalize the reply.
+
+        This is the only function in the codebase that knows what a Gemini
+        response looks like. Everything above it sees :class:`LLMResponse`,
+        which is what lets the mocked client stand in faithfully.
+        """
+        from google.genai import types  # deferred with the client itself
+
+        config: dict[str, Any] = {
+            "system_instruction": system_prompt,
+            # Temperature 0: the same exception must investigate the same way
+            # twice, or the determinism guarantee stops at Layer 1.
+            "temperature": 0,
+            "tools": [types.Tool(function_declarations=list(tools))],
+        }
+        if force_tool is not None:
+            # Forces a submit_verdict call instead of prose (7.2). Without
+            # it the model can end a turn with an apology, which parses as
+            # nothing at all.
+            config["tool_config"] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY", allowed_function_names=[force_tool]
+                )
+            )
+
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=_to_contents(messages),
+            config=types.GenerateContentConfig(**config),
         )
+        return _from_response(response)
+
+
+# --------------------------------------------------------------------------
+# Gemini wire format
+# --------------------------------------------------------------------------
+#
+# Both functions live at module level so they can be tested without an API
+# key or a client. The translation is the part most likely to be quietly
+# wrong, and it is untestable if it hides inside a method that needs
+# credentials to reach.
+
+
+def _to_contents(messages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert the neutral message list into Gemini `contents`.
+
+    Gemini has no "tool" role: a tool result is a `function_response` part
+    carried on a `user` turn. Getting this wrong does not raise - the model
+    simply never sees the tool output and starts guessing, which looks like
+    a bad model rather than a bad adapter.
+    """
+    contents: list[dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role", "user")
+        if role == "tool":
+            payload = message.get("content")
+            try:
+                parsed = json.loads(payload) if isinstance(payload, str) else payload
+            except json.JSONDecodeError:
+                parsed = {"result": payload}
+            contents.append(
+                {
+                    "role": "user",
+                    "parts": [
+                        {
+                            "function_response": {
+                                "name": message.get("name", "tool"),
+                                "response": parsed
+                                if isinstance(parsed, dict)
+                                else {"result": parsed},
+                            }
+                        }
+                    ],
+                }
+            )
+        else:
+            contents.append(
+                {
+                    "role": "model" if role == "assistant" else "user",
+                    "parts": [{"text": str(message.get("content", ""))}],
+                }
+            )
+    return contents
+
+
+def _from_response(response: Any) -> LLMResponse:
+    """Normalize a Gemini reply into :class:`LLMResponse`.
+
+    Defensive throughout. A response can legitimately carry no candidates,
+    no parts, or text with no function call - and a crash here would end an
+    investigation over a shape the API is entitled to return.
+    """
+    text_parts: list[str] = []
+    calls: list[ToolCall] = []
+
+    for candidate in getattr(response, "candidates", None) or []:
+        content = getattr(candidate, "content", None)
+        for part in getattr(content, "parts", None) or []:
+            function_call = getattr(part, "function_call", None)
+            if function_call is not None and getattr(function_call, "name", None):
+                calls.append(
+                    ToolCall(
+                        name=function_call.name,
+                        args=dict(getattr(function_call, "args", None) or {}),
+                    )
+                )
+            part_text = getattr(part, "text", None)
+            if part_text:
+                text_parts.append(part_text)
+
+    usage = getattr(response, "usage_metadata", None)
+    tokens = int(getattr(usage, "total_token_count", 0) or 0)
+
+    return LLMResponse(
+        text="\n".join(text_parts), tool_calls=calls, tokens_used=tokens
+    )
