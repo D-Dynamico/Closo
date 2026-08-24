@@ -1,5 +1,6 @@
-# Working decision log — local only, see CLAUDE.md §15.1
-SESSION.md
+# docs/sessions/ is deliberately COMMITTED, not ignored. The session protocol in
+# CLAUDE.md requires a new session to start by reading the newest note, and that only
+# works if the notes survive a clone. To keep them local instead, add: docs/sessions/
 
 # Secrets
 .env
