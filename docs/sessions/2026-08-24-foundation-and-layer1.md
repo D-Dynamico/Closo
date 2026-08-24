@@ -279,3 +279,67 @@ truth), and the live Ingest + Scorecard screens. 49 new tests; full suite **245 
 - Next: **Stage 5** — tools + verifier. Verifier *before* investigator: the checker must
   exist before the thing it checks. `test_verifier.py` is the most important test file in
   the repo; hand-craft the verdict fixtures, do not generate them with an LLM.
+
+---
+
+## Stage 5 — Tools + Verifier — 2026-08-25
+
+**Done:** `closo/tools.py` (read-only tool surface) and `closo/layer3_verifier.py` (five
+checks). The **E4 spec conflict is resolved** and ARCHITECTURE §8.1 written. 67 new tests;
+full suite **312 passing**. The verifier exists before the thing it checks, per §13.
+
+**Decisions:**
+
+- **E4 resolution — cap on the anomaly, never on the math.** A verdict citing a fee
+  schedule that wasn't active still has its arithmetic checked in full and must reproduce
+  the bank credit exactly. What changes is confidence: capped to `probable`,
+  `needs_human_signoff`, and the anomaly names both schedules and the date. Closo can prove
+  which schedule produces the amount that moved; it cannot know whether applying it was
+  authorised. A machine shouldn't quietly decide that — it should hand a human the specific
+  question. A cited schedule reproducing *nothing* still fails outright.
+
+- **Claimed rounding is bounded at ₹2.** A verdict may legitimately carry a small
+  adjustment, but an unbounded rounding field is a free parameter that reconciles anything
+  to anything.
+
+- **The verifier can demote confidence, never promote it.** Clean math doesn't make a
+  hedged verdict certain; it makes a hedged verdict arithmetically sound.
+
+- **Exclusivity is tracked across the whole run.** Two exceptions can each "resolve" using
+  the same payment and look individually correct while the money view double-counts.
+
+- **`compute_expected_settlement` takes one schedule per call.** Mixing them would hide
+  which rate applied to which payment — the entire content of E4.
+
+- **Tools return errors, never raise.** An unknown id must be recoverable; an exception
+  ends an investigation over a typo. "No refunds" and "nothing matched" are *data*, since
+  those are the findings that rule out a hypothesis.
+
+**Surprises:**
+
+- **Mutation testing found the two most important tests in the repo were passing for the
+  wrong reason.** Changing the verifier to trust the model's claimed net instead of
+  recomputing — which guts the central claim of the project — **broke nothing**. Every
+  rejection test also tripped a second check, so each still failed, just never for the
+  reason it was written for. Same for disabling the block-vs-records comparison.
+
+  Two isolating cases now exist: a block whose line items are correct but whose stated
+  total doesn't follow from them and equals the credit (only recomputation catches it), and
+  one where claimed gross and MDR are both inflated by the same amount so they still net
+  out correctly (only line-item comparison catches it — the bottom line is right and the
+  fee breakdown shown in the drill-down is fiction).
+
+  **Two of seven mutations passing silently is the whole argument for doing this.** That is
+  four consecutive stages where mutation testing found a broken test.
+
+**Open:**
+
+- E5/E6 both surface as `duplicate_utr`, distinguishable only by the detail string
+  ("2 credits and **1** settlement" vs "**2** settlements"). Watch whether flash-lite can
+  tell them apart in Stage 6; add a distinct reason if not.
+- `tools.py` (364) and `layer3_verifier.py` (362) both exceed §11.9's ~300, like
+  `generator.py`. Three modules over now — worth a split pass, or amending the guidance.
+- Next: **Stage 6** — the investigator. System prompt, tool loop with budget and timeout,
+  forced `submit_verdict`, retry-once on malformed output, mocked-client suite. Then one
+  real-API run. **Check the AI Studio quota before that run**: 15 RPM / 500 RPD on
+  `gemini-3.5-flash-lite`, ~100 requests per full run.
