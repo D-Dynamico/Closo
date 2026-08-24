@@ -1,0 +1,10 @@
+# CLAUDE.md §10.1 requires DEMO_MODE to make no network calls at all.
+# Streamlit's telemetry ping would violate that, so it is off by default.
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+
+[theme]
+base = "light"
