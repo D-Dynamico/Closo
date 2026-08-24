@@ -292,12 +292,37 @@ class CheckResult(ClosoModel):
 
 
 class VerifierResult(ClosoModel):
-    """The outcome of independently re-checking one verdict (8)."""
+    """The outcome of independently re-checking one verdict (8).
+
+    ``passed`` means the arithmetic was reproduced from raw records. It does
+    not mean the intent behind the transaction was validated - that is what
+    ``needs_human_signoff`` is for.
+    """
 
     exception_id: str
     passed: bool
     checks: list[CheckResult] = Field(default_factory=list)
     rejection_reason: RejectionReason | None = None
+
+    #: Set when the cited fee schedule was not the one active on the
+    #: settlement date, yet still reproduces the bank credit exactly. The
+    #: math is proven; whether applying that schedule was authorised is not
+    #: something a machine should decide, so it is handed to a human with
+    #: the specific question attached (8.1).
+    schedule_anomaly: str | None = None
+
+    #: True when the math verified but intent did not - a `probable` verdict,
+    #: or one capped to probable by a schedule anomaly. These land in the
+    #: sign-off sub-list, never in AGENT_RESOLVED_VERIFIED silently.
+    needs_human_signoff: bool = False
+
+    #: Confidence after verification, which may be lower than the verdict
+    #: claimed. The verifier can demote; it can never promote.
+    effective_confidence: Confidence | None = None
+
+    #: Payments this verdict consumes, once it passes. Fed back into the
+    #: verifier so a later verdict citing the same payment is caught.
+    consumed_payment_ids: list[str] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------
