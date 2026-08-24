@@ -359,13 +359,27 @@ def test_e3_payments_carry_a_real_refund(batch: GeneratedBatch, by_id: dict) -> 
             assert payment.status == "partial_refund"
 
 
-def test_e4_applied_schedule_is_not_the_active_one(batch: GeneratedBatch) -> None:
-    """That mismatch is the entire error class."""
+def test_e4_settlement_record_itself_is_correct(batch: GeneratedBatch) -> None:
+    """The record uses the schedule active at settled_at. E4 is a payout
+    that ran on the superseded one, so the discrepancy has to live between
+    the record and the credit - not inside the record. If both sides agreed
+    Pass A would match on the recorded amount and E4 would never reach the
+    investigator at all."""
     settlements = settlements_in_class(batch, "E4")
     assert settlements
     for settlement in settlements:
-        active = active_schedule(settlement.settled_at).name
-        assert settlement.fee_schedule != active, settlement.settlement_id
+        assert settlement.fee_schedule == active_schedule(settlement.settled_at).name
+
+
+def test_e4_credit_disagrees_with_its_settlement_record(
+    batch: GeneratedBatch,
+) -> None:
+    settlements = {s.settlement_id: s for s in batch.settlements}
+    credits = credits_in_class(batch, "E4")
+    assert credits
+    for credit in credits:
+        sid = batch.ground_truth[credit.bank_txn_id]["settlement_id"]
+        assert credit.credit_amount != settlements[sid].amount_settled
 
 
 def test_e4_discrepancy_exceeds_pass_c_tolerance(
@@ -373,14 +387,16 @@ def test_e4_discrepancy_exceeds_pass_c_tolerance(
 ) -> None:
     """If the two schedules differed by under 2.00 for these payments, Pass
     C would absorb E4 into a tolerance match and the class would never
-    reach the investigator at all."""
-    for settlement in settlements_in_class(batch, "E4"):
+    reach the investigator."""
+    settlements = {s.settlement_id: s for s in batch.settlements}
+    for credit in credits_in_class(batch, "E4"):
+        settlement = settlements[batch.ground_truth[credit.bank_txn_id]["settlement_id"]]
         members = [by_id[pid] for pid in settlement.payment_ids]
         _, _, _, active_net = settlement_math(
             members, active_schedule(settlement.settled_at)
         )
-        drift = abs(active_net - settlement.amount_settled)
-        assert drift > PASS_C_TOLERANCE, settlement.settlement_id
+        drift = abs(active_net - credit.credit_amount)
+        assert drift > PASS_C_TOLERANCE, credit.bank_txn_id
 
 
 def test_e2_credits_land_later_than_the_settlement_date(
@@ -392,10 +408,38 @@ def test_e2_credits_land_later_than_the_settlement_date(
         assert credit.value_date > settlements[sid].settled_at
 
 
-def test_e7_settlements_carry_actual_drift(batch: GeneratedBatch) -> None:
-    for settlement in settlements_in_class(batch, "E7"):
-        assert settlement.rounding != 0
-        assert abs(settlement.rounding) <= PASS_C_TOLERANCE
+def test_e7_credit_drifts_from_the_record_but_stays_in_tolerance(
+    batch: GeneratedBatch,
+) -> None:
+    """The drift sits between record and credit. Baked into the settlement
+    record instead, the credit would equal the recorded amount, Pass A
+    would take it, and Pass C's tolerance branch would go untested by any
+    real record."""
+    settlements = {s.settlement_id: s for s in batch.settlements}
+    credits = credits_in_class(batch, "E7")
+    assert credits
+    for credit in credits:
+        settlement = settlements[batch.ground_truth[credit.bank_txn_id]["settlement_id"]]
+        drift = abs(credit.credit_amount - settlement.amount_settled)
+        assert drift != 0, credit.bank_txn_id
+        assert drift <= PASS_C_TOLERANCE, credit.bank_txn_id
+
+
+def test_e7_includes_a_credit_exactly_on_the_tolerance_boundary(
+    batch: GeneratedBatch,
+) -> None:
+    """A drift of exactly 2.00 must match; 2.01 must not. Having a real
+    record sitting on the boundary means the inclusive comparison is
+    exercised by the demo set, not only by a hand-built fixture."""
+    settlements = {s.settlement_id: s for s in batch.settlements}
+    drifts = {
+        abs(
+            c.credit_amount
+            - settlements[batch.ground_truth[c.bank_txn_id]["settlement_id"]].amount_settled
+        )
+        for c in credits_in_class(batch, "E7")
+    }
+    assert PASS_C_TOLERANCE in drifts
 
 
 # --------------------------------------------------------------------------

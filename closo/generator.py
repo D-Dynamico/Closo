@@ -294,6 +294,51 @@ class Generator:
             )
             self._commit(group, settlement, [credit], error_class, resolution)
 
+    def _build_fee_mismatch(self) -> None:
+        """E4 - the payout ran on a fee schedule that was no longer active.
+
+        The settlement *record* is correct: it uses the schedule active at
+        ``settled_at``. The money that actually moved was computed under the
+        old one. Putting the discrepancy between the record and the credit
+        is what makes this an exception at all - if both sides agreed, Pass
+        A would match on the recorded amount and the class would never
+        reach the investigator.
+
+        Pass C then recomputes with the active schedule, reproduces the
+        record rather than the credit, and the gap exceeds tolerance.
+        """
+        stale = FEE_SCHEDULES["v1"]
+        for group in self._group("E4"):
+            settled_at = self._settled_on(group)
+            settlement = self._settle(group, settled_at)
+
+            _, _, _, stale_net = settlement_math(group, stale)
+            credit = self._credit(settlement, stale_net)
+
+            self._commit(
+                group, settlement, [credit], "E4",
+                "payout computed under the superseded fee schedule v1",
+            )
+
+    def _build_rounding_drift(self) -> None:
+        """E7 - the credit is a rupee or two off the settlement record.
+
+        The drift lives between the record and the credit rather than
+        inside the record. Baked into the settlement, the credit would
+        match the recorded amount exactly and Pass A would take it, leaving
+        Pass C's tolerance branch untested by any real record.
+        """
+        for group in self._group("E7"):
+            settlement = self._settle(group, self._settled_on(group))
+            drift = money(self.rng.choice(("1.00", "-1.00", "2.00", "-1.50")))
+            credit = self._credit(
+                settlement, money(settlement.amount_settled + drift)
+            )
+            self._commit(
+                group, settlement, [credit], "E7",
+                f"rounding drift of {drift} between record and credit",
+            )
+
     def _build_refunds(self) -> None:
         """E3 - a partial refund netted into the settlement.
 
@@ -450,16 +495,10 @@ class Generator:
         )
         self._build_simple("E2", "settlement lag: credit lands T+3", lag_days=3)
         self._build_refunds()
-        self._build_simple(
-            "E4",
-            "fee schedule v1 applied to a settlement the cutover puts on v2",
-            schedule=FEE_SCHEDULES["v1"],
-        )
+        self._build_fee_mismatch()
         self._build_splits()
         self._build_duplicate_utr()
-        self._build_simple(
-            "E7", "rounding drift within tolerance", rounding_drift=True
-        )
+        self._build_rounding_drift()
         self._build_simple(
             "E8", "no parseable UTR in the narration", truncate_utr=True
         )

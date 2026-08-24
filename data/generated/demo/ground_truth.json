@@ -367,7 +367,7 @@
         "pay_0326",
         "pay_0328"
       ],
-      "true_resolution": "fee schedule v1 applied to a settlement the cutover puts on v2"
+      "true_resolution": "payout computed under the superseded fee schedule v1"
     },
     "bt_0336": {
       "error_class": "E4",
@@ -376,7 +376,7 @@
         "pay_0330",
         "pay_0332"
       ],
-      "true_resolution": "fee schedule v1 applied to a settlement the cutover puts on v2"
+      "true_resolution": "payout computed under the superseded fee schedule v1"
     },
     "bt_0344": {
       "error_class": "E5",
@@ -421,7 +421,7 @@
         "pay_0355",
         "pay_0357"
       ],
-      "true_resolution": "rounding drift within tolerance"
+      "true_resolution": "rounding drift of -1.50 between record and credit"
     },
     "bt_0365": {
       "error_class": "E7",
@@ -430,7 +430,7 @@
         "pay_0359",
         "pay_0361"
       ],
-      "true_resolution": "rounding drift within tolerance"
+      "true_resolution": "rounding drift of 2.00 between record and credit"
     },
     "bt_0371": {
       "error_class": "E8",
@@ -494,7 +494,7 @@
   "missing_settlements": {
     "setl_0378": {
       "error_class": "E9",
-      "expected_amount": "27410.70",
+      "expected_amount": "23659.59",
       "source_payment_ids": [
         "pay_0375"
       ],
@@ -502,7 +502,7 @@
     },
     "setl_0379": {
       "error_class": "E9",
-      "expected_amount": "18894.31",
+      "expected_amount": "20974.14",
       "source_payment_ids": [
         "pay_0377"
       ],
