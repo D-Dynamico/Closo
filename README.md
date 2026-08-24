@@ -60,5 +60,8 @@ ground truth, escalating exactly the two designed-unresolvable classes.
 ## Docs
 
 - [`CLAUDE.md`](CLAUDE.md) — onboarding, commands, conventions
-- [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) — the full specification
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — thesis, layer contracts, module map, invariants
+- [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) — data generation, UI and demo mode, stages, definition of done
+- [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) — per-module test requirements
+- [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) — index mapping each section number to its file
 - [`docs/sessions/`](docs/sessions/) — dated notes: what changed, why, and what nearly broke

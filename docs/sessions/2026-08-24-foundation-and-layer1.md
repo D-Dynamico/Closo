@@ -174,3 +174,43 @@ E9/E10 escalate exactly as designed. Layer 2 gets 8 bank-side exceptions — few
 - **E4 spec conflict still unresolved** (§5.2 vs §8.3) — decide in Stage 5. Now more concrete: E4 exceptions carry reason `outside_tolerance`, and the correct verdict will cite v1 while v2 is active.
 - Layer 2 will need to tell E5 from E6: both surface as `duplicate_utr`, distinguished only by the detail string ("2 credits and **1** settlement" vs "**2** settlements"). Consider a distinct reason in Stage 6 if the investigator struggles.
 - Next: **Stage 4** — audit log (SQLite, append-only trigger), `pipeline.run()` Layer-1-only, Streamlit Ingest + Scorecard on real numbers. This is the checkpoint after which there is always a demoable product.
+
+---
+
+## Docs restructure — 2026-08-24
+
+**Done:** `CLAUDE.md` cut from 476 to ~130 lines. The specification split by concern into
+`docs/ARCHITECTURE.md` (thesis, layer contracts, module map, invariants),
+`docs/WORKFLOWS.md` (data generation, UI and demo mode, stages, definition of done) and
+`docs/TEST_PLAN.md`. `docs/SYSTEM_DESIGN.md` reduced to an index mapping each section
+number to its file. This log became a dated note. `README.md` written properly. 196 tests.
+
+**Decisions:**
+
+- **CLAUDE.md was doing two incompatible jobs** — onboarding a session, and holding the full
+  spec. The first wants a page readable in a minute; the second wants exhaustive detail. A
+  new session was spending its opening budget reading a test plan before knowing what the
+  project was.
+
+- **Section numbers kept stable through the split.** Docstrings across `closo/` cite them
+  (twelve references). Renumbering would have turned each into a dangling pointer with no
+  code failing anywhere.
+
+- **`docs/sessions/` is committed, reversing the earlier decision to gitignore it.** The
+  protocol requires a session to *open* by reading the newest note. Ignored, a fresh
+  checkout starts blind. `.gitignore` carries the one-line revert, and a test guards it.
+
+- **Conventions in CLAUDE.md written from what went wrong, not from the spec** — the import
+  check must run in a subprocess, `.gitattributes` is what keeps a fresh clone
+  deterministic, requests not tokens are the scarce resource. All three cost real debugging.
+
+**Surprises:**
+
+- **The first version of the section-reference test was toothless.** It fell back to
+  matching the parent section, so a subsection renumbered from 7.4 to 7.9 passed cleanly —
+  a test that exists to catch renumbering, silently not catching renumbering. Found only by
+  mutating the docs to check the guard bit. Now matches exactly, and resolves both real
+  headings (`### 7.4`) and numbered list items (§11's invariants, §8's checks).
+  **Lesson worth keeping: mutate the docs the same way we mutate the code.**
+
+**Open:** unchanged — the E4 spec conflict (§5.2 vs §8.3) and E5/E6 sharing `duplicate_utr`.

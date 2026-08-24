@@ -9,15 +9,17 @@ must maintain it** — it is not optional:
 
 1. **At the start of a session**, skim the newest file in [`docs/sessions/`](docs/sessions/)
    (and this file). That is where the last session recorded what changed, why, and what's
-   still open. [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) is the deep architecture +
-   test-plan reference; its section numbers are cited from docstrings throughout `closo/`.
+   still open. [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) indexes the spec: which of
+   [ARCHITECTURE](docs/ARCHITECTURE.md), [WORKFLOWS](docs/WORKFLOWS.md) or
+   [TEST_PLAN](docs/TEST_PLAN.md) each section number lives in. Those numbers are cited from
+   docstrings throughout `closo/`, so they must not be renumbered.
 2. **After each successful, behavior-changing task**, update the running session note
    `docs/sessions/<YYYY-MM-DD>-<topic>.md` (create it on the first such task of the session):
    what changed, why (the decision, not just the diff), files touched, and how you verified it.
    Trivial/no-op turns don't need an entry.
 3. **At session end**, make sure that note is complete — scope, decisions *with reasoning*,
-   surprises, open items — and update any doc whose *behavior* changed (`README.md`,
-   `docs/SYSTEM_DESIGN.md`).
+   surprises, open items — and update any doc whose *behavior* changed: `README.md`,
+   `docs/ARCHITECTURE.md` (structure and contracts) or `docs/WORKFLOWS.md` (how things run).
 4. **Record surprises, not just successes.** Several of the worst bugs so far were found
    while writing a test or a commit message, not by the code failing. A note that lists only
    what shipped is worth much less than one that says what nearly went wrong.
@@ -26,7 +28,7 @@ must maintain it** — it is not optional:
 
 - **One commit per substep.** A substep is one bounded change, not a whole stage. Stage the
   specific files — `git add -A` has already bundled unrelated work into the wrong commit once.
-- **Push once per stage**, after that stage's exit criteria in `docs/SYSTEM_DESIGN.md` §13
+- **Push once per stage**, after that stage's exit criteria in `docs/WORKFLOWS.md` §13
   pass. Never push a stage whose tests are red.
 - **Commit title: one line.** Imperative, no trailing period, no `type(scope):` prefix.
 - **Commit description: humanized.** Write it the way you'd explain the change to a teammate —
@@ -66,25 +68,17 @@ python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -r requirement
 `make test` / `make run` / `make generate` wrap the same commands. On Windows the venv
 interpreter is `./.venv/Scripts/python.exe`; a bare `python` is the system 3.12 with no deps.
 
-## Architecture
+## Architecture in one paragraph
 
-Three layers, each consuming only what the previous one could not resolve:
+Three layers, each consuming only what the previous one could not resolve. **Layer 1**
+(`layer1_matcher.py`, pandas + Decimal, no LLM) runs a deterministic cascade. **Layer 2**
+(`layer2_investigator.py`, Gemini) investigates the residue, one isolated conversation per
+exception. **Layer 3** (`layer3_verifier.py`, pure Python, no LLM) re-checks every verdict
+from raw records and can overrule the model. Every bank transaction ends in exactly one of
+three terminal states — `AUTO_MATCHED`, `AGENT_RESOLVED_VERIFIED`, `ESCALATED` — and there
+is no fourth.
 
-- **Layer 1 — `layer1_matcher.py`** (pandas + Decimal, no LLM). A cascade over a shrinking
-  pool: Pass A exact UTR join → Pass B exact amount inside a T+3 business-day window →
-  Pass C netting recomputation within ±₹2. Currently 83% auto-matched, zero false matches.
-- **Layer 2 — `layer2_investigator.py`** (Gemini, tool calling). One isolated conversation
-  per exception. Forms hypotheses, calls read-only tools, emits a structured verdict.
-- **Layer 3 — `layer3_verifier.py`** (pure Python, no LLM). Re-checks every verdict from raw
-  records. PASS → resolved. FAIL → escalated, with the rejected verdict preserved.
-
-Every bank transaction ends in **exactly one of three terminal states** — `AUTO_MATCHED`,
-`AGENT_RESOLVED_VERIFIED`, `ESCALATED`. There is no fourth. A verdict that fails
-verification is never shown as resolved.
-
-Supporting modules: `config.py` (money quantizer, fee schedules, UTR regexes), `schemas.py`
-(pydantic models), `taxonomy.py` (error classes, settlement arithmetic), `generator.py` +
-`dataset_io.py` (synthetic data), `llm_client.py` (provider seam).
+Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
 
 ## Conventions to preserve when editing
 
@@ -107,7 +101,7 @@ Supporting modules: `config.py` (money quantizer, fee schedules, UTR regexes), `
   only `metrics.py` may call `load_ground_truth()`, and only after a run completes.
 - **Requests, not tokens, are the scarce resource.** Free tier is 15 RPM / 500 RPD on
   `gemini-3.5-flash-lite`; every full-Flash model is capped at 20 RPD and cannot finish a
-  single run (§7.4). Cache every response. The budget guard marks the remainder
+  single run (ARCHITECTURE §7.4). Cache every response. The budget guard marks the remainder
   `unresolvable — quota exhausted` and stops cleanly rather than dying mid-batch.
 - **Determinism is load-bearing.** Same seed → byte-identical files. The generator uses one
   seeded `random.Random` and a fixed build order; reordering the class builders changes every
@@ -127,3 +121,13 @@ Two open items carried forward, detailed in the newest `docs/sessions/` note: th
 conflict** between §5.2 and §8.3 — the verifier as specified would reject the only correct E4
 verdict, and the plan is to cap it at `probable` — and E5/E6 both surfacing as
 `duplicate_utr`, distinguishable only by the detail string.
+
+## Docs
+
+| File | What it is |
+|---|---|
+| [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) | Index — maps every § number to its file |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Thesis, layer contracts, module map, invariants |
+| [`docs/WORKFLOWS.md`](docs/WORKFLOWS.md) | Data generation, UI and demo mode, stages, definition of done |
+| [`docs/TEST_PLAN.md`](docs/TEST_PLAN.md) | Per-module test requirements |
+| [`docs/sessions/`](docs/sessions/) | Dated notes — what changed, why, and what nearly broke |
