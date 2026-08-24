@@ -69,7 +69,7 @@ There is no fourth state. An agent verdict that fails verification is NEVER show
 |---|---|---|
 | Language | Python 3.11+ | type hints everywhere, `dataclasses` or `pydantic` for schemas |
 | Data engine | pandas | Layer 1, verifier, metrics |
-| LLM | Google Gemini API, `gemini-3.7-flash`, function calling | investigator only; temperature 0; modest output cap. SDK is `google-genai` (`from google import genai`) — NOT the legacy `google-generativeai` |
+| LLM | Google Gemini API, `gemini-3.5-flash-lite`, function calling | investigator only; temperature 0; modest output cap. SDK is `google-genai` (`from google import genai`) — NOT the legacy `google-generativeai`. Model chosen on quota, see §7.4 |
 | Persistence | SQLite (stdlib `sqlite3`) | audit log, cached API responses, run results |
 | UI | Streamlit | 5 screens, sidebar nav |
 | Charts | Plotly | stacked tier bar, taxonomy chart |
@@ -79,7 +79,7 @@ There is no fourth state. An agent verdict that fails verification is NEVER show
 
 Razorpay test-mode API is optional garnish: if keys are present, pull real test payments and merge with synthetic data; if not, run fully on synthetic data. **Everything must work with `DEMO_MODE=1` and zero network access** (see §10).
 
-**Provider note.** Layer 2 runs on the Gemini free tier, which is rate-limited per minute and per day (exact limits are no longer published per-model — check https://aistudio.google.com/rate-limit). A full run is ~20 exceptions × up to 8 tool-call round-trips ≈ up to 180 requests, enough to exhaust a day's quota in one or two live runs. Two consequences, both non-negotiable:
+**Provider note.** Layer 2 runs on the Gemini free tier. Measured quotas on this account (2026-08-24) make request count — not tokens, not money — the binding constraint on the whole design; see §7.4. Two consequences, both non-negotiable:
 
 - All Layer 2 access goes through `closo/llm_client.py`, a thin provider seam (`LLMClient` protocol + `GeminiClient` + `MockLLMClient`). No module outside that file imports `google.genai`. This is what keeps the mocked test suite free and a provider swap contained to one file.
 - Every LLM response is cached in SQLite keyed by exception content, so re-runs, tests, and the demo cost zero requests. Only a first live run spends quota.
@@ -215,6 +215,25 @@ Rules baked into the system prompt: max 8 tool calls per exception; `unresolvabl
 - Cache every LLM response in SQLite keyed by exception content. Free-tier quota is finite; re-runs, tests and the demo must cost zero requests.
 - Retry once on 429/503 with backoff, then `unresolvable`. Rate-limit exhaustion must degrade one exception, never kill the batch.
 - Process exceptions sequentially in demo mode (streaming UI narration), `ThreadPoolExecutor(4)` otherwise.
+
+### 7.4 Model choice and the quota constraint
+
+Free-tier quotas measured in AI Studio on 2026-08-24:
+
+| Model | RPM | TPM | RPD | Full runs/day |
+|---|---|---|---|---|
+| `gemini-3.7-flash` | 5 | 250K | 20 | 0.2 — cannot finish one run |
+| `gemini-3.6-flash` | 5 | 250K | 20 | 0.2 — cannot finish one run |
+| `gemini-3.5-flash` | 5 | 250K | 20 | 0.2 — cannot finish one run |
+| **`gemini-3.5-flash-lite`** | **15** | **250K** | **500** | **~5** |
+
+A run is ~20 exceptions × ~5 requests each ≈ 100 requests. Every full-Flash model is therefore disqualified: 20 RPD cannot complete four exceptions, and 5 RPM would add ~20 minutes of pure throttling to a throughput number that is part of the judging bar. **`gemini-3.5-flash-lite` is the primary model.** TPM is never the constraint — optimize for fewer requests, never for fewer tokens.
+
+Flash-lite reasons less well than full Flash, and that is acceptable *by design*: the model never does arithmetic (§7.1), and every verdict is recomputed from raw records (§8). A weak proposal does not become a wrong answer — it becomes an `ESCALATED` row labelled "agent proposed, verifier rejected", which §10 already treats as the strongest thing on the screen. A cheap model behind a strict verifier demonstrates the thesis better than an expensive one.
+
+**Budget guard (required).** The investigator tracks requests against a configured RPD ceiling. On exhaustion it stops cleanly and marks every remaining exception `unresolvable — quota exhausted`, recording an audit event. A quota wall must degrade the batch honestly, never crash it or silently truncate the scorecard.
+
+**Optional Stage 6 escalation.** The unused 20 RPD on `gemini-3.7-flash` is roughly the right size to retry only those exceptions flash-lite returns `unresolvable` on, under a hard 20/day budget. Build only if Stage 6 shows flash-lite failing E4/E5; it is not required for the definition of done.
 
 ---
 
