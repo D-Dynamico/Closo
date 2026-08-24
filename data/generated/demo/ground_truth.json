@@ -1,0 +1,513 @@
+{
+  "bank_txns": {
+    "bt_0234": {
+      "error_class": "E1",
+      "settlement_id": "setl_0233",
+      "source_payment_ids": [
+        "pay_0002",
+        "pay_0004",
+        "pay_0006",
+        "pay_0008",
+        "pay_0010"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0236": {
+      "error_class": "E1",
+      "settlement_id": "setl_0235",
+      "source_payment_ids": [
+        "pay_0012",
+        "pay_0014",
+        "pay_0016",
+        "pay_0018",
+        "pay_0020"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0238": {
+      "error_class": "E1",
+      "settlement_id": "setl_0237",
+      "source_payment_ids": [
+        "pay_0022",
+        "pay_0024",
+        "pay_0026",
+        "pay_0028",
+        "pay_0030"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0240": {
+      "error_class": "E1",
+      "settlement_id": "setl_0239",
+      "source_payment_ids": [
+        "pay_0032",
+        "pay_0034",
+        "pay_0036",
+        "pay_0038",
+        "pay_0040"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0242": {
+      "error_class": "E1",
+      "settlement_id": "setl_0241",
+      "source_payment_ids": [
+        "pay_0042",
+        "pay_0044",
+        "pay_0046",
+        "pay_0048",
+        "pay_0050"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0244": {
+      "error_class": "E1",
+      "settlement_id": "setl_0243",
+      "source_payment_ids": [
+        "pay_0052",
+        "pay_0054",
+        "pay_0056",
+        "pay_0058",
+        "pay_0060"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0246": {
+      "error_class": "E1",
+      "settlement_id": "setl_0245",
+      "source_payment_ids": [
+        "pay_0062",
+        "pay_0064",
+        "pay_0066",
+        "pay_0068",
+        "pay_0070"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0248": {
+      "error_class": "E1",
+      "settlement_id": "setl_0247",
+      "source_payment_ids": [
+        "pay_0072",
+        "pay_0074",
+        "pay_0076",
+        "pay_0078",
+        "pay_0080"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0250": {
+      "error_class": "E1",
+      "settlement_id": "setl_0249",
+      "source_payment_ids": [
+        "pay_0082",
+        "pay_0084",
+        "pay_0086",
+        "pay_0088",
+        "pay_0090"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0252": {
+      "error_class": "E1",
+      "settlement_id": "setl_0251",
+      "source_payment_ids": [
+        "pay_0092",
+        "pay_0094",
+        "pay_0096",
+        "pay_0098",
+        "pay_0100"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0254": {
+      "error_class": "E1",
+      "settlement_id": "setl_0253",
+      "source_payment_ids": [
+        "pay_0102",
+        "pay_0104",
+        "pay_0106",
+        "pay_0108",
+        "pay_0110"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0256": {
+      "error_class": "E1",
+      "settlement_id": "setl_0255",
+      "source_payment_ids": [
+        "pay_0112",
+        "pay_0114",
+        "pay_0116",
+        "pay_0118",
+        "pay_0120"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0258": {
+      "error_class": "E1",
+      "settlement_id": "setl_0257",
+      "source_payment_ids": [
+        "pay_0122",
+        "pay_0124",
+        "pay_0126",
+        "pay_0128",
+        "pay_0130"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0260": {
+      "error_class": "E1",
+      "settlement_id": "setl_0259",
+      "source_payment_ids": [
+        "pay_0132",
+        "pay_0134",
+        "pay_0136",
+        "pay_0138",
+        "pay_0140"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0262": {
+      "error_class": "E1",
+      "settlement_id": "setl_0261",
+      "source_payment_ids": [
+        "pay_0142",
+        "pay_0144",
+        "pay_0146",
+        "pay_0148",
+        "pay_0150"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0264": {
+      "error_class": "E1",
+      "settlement_id": "setl_0263",
+      "source_payment_ids": [
+        "pay_0152",
+        "pay_0154",
+        "pay_0156",
+        "pay_0158",
+        "pay_0160"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0266": {
+      "error_class": "E1",
+      "settlement_id": "setl_0265",
+      "source_payment_ids": [
+        "pay_0162",
+        "pay_0164",
+        "pay_0166",
+        "pay_0168",
+        "pay_0170"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0268": {
+      "error_class": "E1",
+      "settlement_id": "setl_0267",
+      "source_payment_ids": [
+        "pay_0172",
+        "pay_0174",
+        "pay_0176",
+        "pay_0178",
+        "pay_0180"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0270": {
+      "error_class": "E1",
+      "settlement_id": "setl_0269",
+      "source_payment_ids": [
+        "pay_0182",
+        "pay_0184",
+        "pay_0186",
+        "pay_0188",
+        "pay_0190"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0272": {
+      "error_class": "E1",
+      "settlement_id": "setl_0271",
+      "source_payment_ids": [
+        "pay_0192",
+        "pay_0194",
+        "pay_0196",
+        "pay_0198",
+        "pay_0200"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0274": {
+      "error_class": "E1",
+      "settlement_id": "setl_0273",
+      "source_payment_ids": [
+        "pay_0202",
+        "pay_0204",
+        "pay_0206",
+        "pay_0208",
+        "pay_0210"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0276": {
+      "error_class": "E1",
+      "settlement_id": "setl_0275",
+      "source_payment_ids": [
+        "pay_0212",
+        "pay_0214",
+        "pay_0216",
+        "pay_0218",
+        "pay_0220"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0278": {
+      "error_class": "E1",
+      "settlement_id": "setl_0277",
+      "source_payment_ids": [
+        "pay_0222",
+        "pay_0224",
+        "pay_0226",
+        "pay_0228",
+        "pay_0230"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0280": {
+      "error_class": "E1",
+      "settlement_id": "setl_0279",
+      "source_payment_ids": [
+        "pay_0232"
+      ],
+      "true_resolution": "clean straight-through match"
+    },
+    "bt_0298": {
+      "error_class": "E2",
+      "settlement_id": "setl_0297",
+      "source_payment_ids": [
+        "pay_0282",
+        "pay_0284"
+      ],
+      "true_resolution": "settlement lag: credit lands T+3"
+    },
+    "bt_0300": {
+      "error_class": "E2",
+      "settlement_id": "setl_0299",
+      "source_payment_ids": [
+        "pay_0286",
+        "pay_0288"
+      ],
+      "true_resolution": "settlement lag: credit lands T+3"
+    },
+    "bt_0302": {
+      "error_class": "E2",
+      "settlement_id": "setl_0301",
+      "source_payment_ids": [
+        "pay_0290",
+        "pay_0292"
+      ],
+      "true_resolution": "settlement lag: credit lands T+3"
+    },
+    "bt_0304": {
+      "error_class": "E2",
+      "settlement_id": "setl_0303",
+      "source_payment_ids": [
+        "pay_0294",
+        "pay_0296"
+      ],
+      "true_resolution": "settlement lag: credit lands T+3"
+    },
+    "bt_0316": {
+      "error_class": "E3",
+      "settlement_id": "setl_0315",
+      "source_payment_ids": [
+        "pay_0306"
+      ],
+      "true_resolution": "partial refund netted into the settlement"
+    },
+    "bt_0318": {
+      "error_class": "E3",
+      "settlement_id": "setl_0317",
+      "source_payment_ids": [
+        "pay_0308"
+      ],
+      "true_resolution": "partial refund netted into the settlement"
+    },
+    "bt_0320": {
+      "error_class": "E3",
+      "settlement_id": "setl_0319",
+      "source_payment_ids": [
+        "pay_0310"
+      ],
+      "true_resolution": "partial refund netted into the settlement"
+    },
+    "bt_0322": {
+      "error_class": "E3",
+      "settlement_id": "setl_0321",
+      "source_payment_ids": [
+        "pay_0312"
+      ],
+      "true_resolution": "partial refund netted into the settlement"
+    },
+    "bt_0324": {
+      "error_class": "E3",
+      "settlement_id": "setl_0323",
+      "source_payment_ids": [
+        "pay_0314"
+      ],
+      "true_resolution": "partial refund netted into the settlement"
+    },
+    "bt_0334": {
+      "error_class": "E4",
+      "settlement_id": "setl_0333",
+      "source_payment_ids": [
+        "pay_0326",
+        "pay_0328"
+      ],
+      "true_resolution": "fee schedule v1 applied to a settlement the cutover puts on v2"
+    },
+    "bt_0336": {
+      "error_class": "E4",
+      "settlement_id": "setl_0335",
+      "source_payment_ids": [
+        "pay_0330",
+        "pay_0332"
+      ],
+      "true_resolution": "fee schedule v1 applied to a settlement the cutover puts on v2"
+    },
+    "bt_0344": {
+      "error_class": "E5",
+      "settlement_id": "setl_0343",
+      "source_payment_ids": [
+        "pay_0338",
+        "pay_0340",
+        "pay_0342"
+      ],
+      "true_resolution": "split settlement: two bank credits sum to one settlement net"
+    },
+    "bt_0345": {
+      "error_class": "E5",
+      "settlement_id": "setl_0343",
+      "source_payment_ids": [
+        "pay_0338",
+        "pay_0340",
+        "pay_0342"
+      ],
+      "true_resolution": "split settlement: two bank credits sum to one settlement net"
+    },
+    "bt_0351": {
+      "error_class": "E6",
+      "settlement_id": "setl_0350",
+      "source_payment_ids": [
+        "pay_0347"
+      ],
+      "true_resolution": "duplicate UTR shared by two settlements"
+    },
+    "bt_0353": {
+      "error_class": "E6",
+      "settlement_id": "setl_0352",
+      "source_payment_ids": [
+        "pay_0349"
+      ],
+      "true_resolution": "duplicate UTR shared by two settlements"
+    },
+    "bt_0363": {
+      "error_class": "E7",
+      "settlement_id": "setl_0362",
+      "source_payment_ids": [
+        "pay_0355",
+        "pay_0357"
+      ],
+      "true_resolution": "rounding drift within tolerance"
+    },
+    "bt_0365": {
+      "error_class": "E7",
+      "settlement_id": "setl_0364",
+      "source_payment_ids": [
+        "pay_0359",
+        "pay_0361"
+      ],
+      "true_resolution": "rounding drift within tolerance"
+    },
+    "bt_0371": {
+      "error_class": "E8",
+      "settlement_id": "setl_0370",
+      "source_payment_ids": [
+        "pay_0367"
+      ],
+      "true_resolution": "no parseable UTR in the narration"
+    },
+    "bt_0373": {
+      "error_class": "E8",
+      "settlement_id": "setl_0372",
+      "source_payment_ids": [
+        "pay_0369"
+      ],
+      "true_resolution": "no parseable UTR in the narration"
+    },
+    "bt_0385": {
+      "error_class": "E1",
+      "settlement_id": "setl_0384",
+      "source_payment_ids": [
+        "pay_0381",
+        "pay_0383"
+      ],
+      "true_resolution": "clean match on the v2 boundary"
+    },
+    "bt_0391": {
+      "error_class": "E1",
+      "settlement_id": "setl_0390",
+      "source_payment_ids": [
+        "pay_0387",
+        "pay_0389"
+      ],
+      "true_resolution": "clean match on the v1 boundary"
+    },
+    "bt_0392": {
+      "error_class": "E10",
+      "settlement_id": null,
+      "source_payment_ids": [],
+      "true_resolution": "foreign credit with no Razorpay counterpart - escalate"
+    },
+    "bt_0393": {
+      "error_class": "E10",
+      "settlement_id": null,
+      "source_payment_ids": [],
+      "true_resolution": "foreign credit with no Razorpay counterpart - escalate"
+    }
+  },
+  "counts": {
+    "E1": 26,
+    "E10": 2,
+    "E2": 4,
+    "E3": 5,
+    "E4": 2,
+    "E5": 2,
+    "E6": 2,
+    "E7": 2,
+    "E8": 2,
+    "E9": 2
+  },
+  "missing_settlements": {
+    "setl_0378": {
+      "error_class": "E9",
+      "expected_amount": "27410.70",
+      "source_payment_ids": [
+        "pay_0375"
+      ],
+      "true_resolution": "settlement genuinely absent from the bank statement - raise with Razorpay support"
+    },
+    "setl_0379": {
+      "error_class": "E9",
+      "expected_amount": "18894.31",
+      "source_payment_ids": [
+        "pay_0377"
+      ],
+      "true_resolution": "settlement genuinely absent from the bank statement - raise with Razorpay support"
+    }
+  },
+  "seed": 42
+}

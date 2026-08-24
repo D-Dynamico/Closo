@@ -68,14 +68,33 @@ def write_csv(path: Path, columns: list[str], rows: list[dict]) -> None:
             writer.writerow({c: _cell(row.get(c)) for c in columns})
 
 
+def _bank_rows(bank_txns: list[BankTxn]) -> list[dict]:
+    """Serialize bank credits with the ``utr`` column left blank.
+
+    A real bank statement does not hand you a parsed UTR - it hands you a
+    narration with the reference buried in bank-specific junk, and deriving
+    one from the other is Layer 1's Pass A job (6). Shipping a
+    pre-parsed column would let the matcher skip ``normalize_utr``
+    entirely, and error class E8 - a narration whose UTR cannot be
+    recovered - would silently stop testing anything at all.
+
+    The field stays on the model because Layer 1 populates it in memory.
+    """
+    rows = []
+    for txn in bank_txns:
+        row = txn.model_dump(mode="json")
+        row["utr"] = None
+        rows.append(row)
+    return rows
+
+
 def write_batch(batch: GeneratedBatch, out_dir: Path, seed: int) -> None:
     """Write the source CSVs and ``ground_truth.json`` into ``out_dir``."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     write_csv(out_dir / "payments.csv", PAYMENT_COLUMNS,
               [p.model_dump(mode="json") for p in batch.payments])
-    write_csv(out_dir / "bank_stmt.csv", BANK_COLUMNS,
-              [b.model_dump(mode="json") for b in batch.bank_txns])
+    write_csv(out_dir / "bank_stmt.csv", BANK_COLUMNS, _bank_rows(batch.bank_txns))
     write_csv(out_dir / "order_ledger.csv", ORDER_COLUMNS,
               [o.model_dump(mode="json") for o in batch.orders])
     write_csv(out_dir / "settlements.csv", SETTLEMENT_COLUMNS,
