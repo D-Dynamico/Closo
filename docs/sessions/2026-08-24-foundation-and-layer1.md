@@ -343,3 +343,67 @@ full suite **312 passing**. The verifier exists before the thing it checks, per 
   forced `submit_verdict`, retry-once on malformed output, mocked-client suite. Then one
   real-API run. **Check the AI Studio quota before that run**: 15 RPM / 500 RPD on
   `gemini-3.5-flash-lite`, ~100 requests per full run.
+
+---
+
+## Stage 6 — Exception investigator — 2026-08-25
+
+**Done:** `closo/tool_schema.py` (provider-neutral declarations), `closo/layer2_investigator.py`
+(system prompt + bounded loop), `GeminiClient._call_api` with wire-format translation.
+33 new tests, all mocked. Full suite **345 passing**, still fully offline.
+
+**NOT done — needs you:** the real-API run. `GEMINI_API_KEY` is not set and there is no
+`.env`. Everything is built and mocked-tested; a live run is a `cp .env.example .env`, a key
+from [aistudio.google.com/apikey](https://aistudio.google.com/apikey), and one command away.
+
+**Decisions:**
+
+- **Every bound produces `unresolvable`, never an exception.** 8 tool calls, 30s, one
+  corrective retry on prose, one retry on transient API errors, quota above all. Uniform
+  reason: one bad exception must never kill the batch — a run dying at record 12 of 20
+  leaves a scorecard that isn't so much wrong as meaningless.
+
+- **A structurally invalid verdict becomes `unresolvable` in the investigator**, not the
+  verifier. The verifier checks arithmetic against records; it isn't there to repair input
+  that never parsed. A verdict that can't be read has claimed nothing to check.
+
+- **The system prompt says outright that `unresolvable` is correct and the model is not
+  scored on how many it resolves.** Without that the pressure runs one way and the honest
+  exception list — the thing this project argues for — quietly disappears.
+
+- **Wire-format helpers live at module level**, not inside `GeminiClient`. They're the part
+  most likely to be quietly wrong and would be untestable behind a method needing
+  credentials.
+
+- **Non-transient errors are not retried.** Retrying a malformed request spends quota to
+  fail twice.
+
+**Surprises:**
+
+- **An unknown tool name was silently dropped before dispatch**, leaving the turn looking
+  empty. The model would be told nothing and would plausibly call the same imaginary tool
+  again next turn. Now everything that isn't the verdict is dispatched, and an unrecognised
+  name returns a structured error the model can read and correct.
+
+- **The quota message said "budget", not "quota"** — accurate and unhelpful. That string is
+  what a human reads in the escalation queue when working out why half a batch has no
+  verdict.
+
+- **Gemini has no `tool` role.** A tool result is a `function_response` part on a `user`
+  turn. Getting this wrong doesn't raise — the model simply never sees tool output and
+  starts guessing, presenting as a bad model rather than a bad adapter. Miserable to debug
+  live; worth knowing before the first real run.
+
+- **All eight mutations caught on the first pass** — the first stage where that's happened.
+  Five prior stages each had at least one test that couldn't fail. The difference seems to
+  be writing the tests alongside the bounds rather than after them.
+
+**Open:**
+
+- **The real-API run is the only outstanding Stage 6 exit criterion.** Expect ~100 requests
+  against 500 RPD. Unknowns until then: whether flash-lite reliably emits a forced
+  `submit_verdict`, and whether it can tell E5 (split payout) from E6 (duplicate reference)
+  — both reach it as `duplicate_utr`, and `check_duplicate_utr` is designed to disambiguate.
+- `layer2_investigator.py` is 419 lines — now the largest of four modules over §11.9's ~300.
+- Next: **Stage 7** — wire Layer 2 + 3 into `pipeline.run()`, cost metrics, cache the
+  real-API responses into `api_cache` for offline replay.

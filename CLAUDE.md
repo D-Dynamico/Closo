@@ -110,23 +110,27 @@ Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARC
 - **Escalation is success, not failure.** Error classes E9 and E10 are *designed* to be
   unresolvable. A run that "resolves" one has a critical bug, not a good day.
 - **Every module ≤ ~300 lines.** Three now exceed it — `generator.py` (364), `tools.py`
-  (364), `layer3_verifier.py` (362). Flagged rather than hidden; worth a split pass.
+  (364), `layer3_verifier.py` (362), `layer2_investigator.py` (419). Flagged rather than
+  hidden; worth a split pass.
 - **Mutation-test anything that guards something.** Four stages running, mutating the code
   has exposed a test that could not fail — including, in Stage 5, the two tests protecting
   the project's central claim. Docs count too: renumbering a section slipped past its guard.
 
 ## Status
 
-Stages 0–5 complete. 312 tests passing, offline. **There is a demoable product from here
+Stages 0–6 complete except one item. 345 tests passing, offline. **There is a demoable product from here
 on** — `streamlit run app/streamlit_app.py`, press Run reconciliation, see the Scorecard;
 Replay rebuilds it from the audit log with no network at all.
 
 Seed 42: 47 credits, 83.0% match rate, 100% verified accuracy, ₹3.82M reconciled /
 ₹294K stuck, 2 correct escalations and 6 false ones (all awaiting Layer 2).
 
-Next: **Stage 6** — the exception investigator. System prompt, tool loop with budget and
-timeout, forced `submit_verdict`, retry-once on malformed output, mocked-client suite, then
-one real-API run. Check the AI Studio quota first.
+**Outstanding:** the Stage 6 real-API run. `GEMINI_API_KEY` is unset, so Layer 2 has only
+ever run against the mock. To do it: `cp .env.example .env`, add a key from
+aistudio.google.com/apikey, then run the pipeline. Expect ~100 requests against 500 RPD.
+
+Next: **Stage 7** — wire Layers 2 and 3 into `pipeline.run()`, add cost metrics, and cache
+the real-API responses into `api_cache` so the demo replays offline.
 
 The **E4 spec conflict is resolved** — ARCHITECTURE §8.1. A verdict citing an inactive fee
 schedule has its math checked in full and is capped at `probable` with the anomaly named,
