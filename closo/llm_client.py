@@ -240,15 +240,18 @@ class GeminiClient:
         api_key: str | None = None,
         budget: RequestBudget | None = None,
     ) -> None:
-        from google import genai  # deferred: see class docstring
-
         key = api_key or GEMINI_API_KEY
         if not key:
+            # Checked before the import so a missing key does not pull the SDK
+            # into sys.modules - the 11.3 invariant tests read that.
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. Copy .env.example to .env and add "
                 "a key from https://aistudio.google.com/apikey, or run with "
                 "DEMO_MODE=1 and replay a cached run."
             )
+
+        from google import genai  # deferred: see class docstring
+
         self.model = model
         self.budget = budget or RequestBudget()
         self._client = genai.Client(api_key=key)
