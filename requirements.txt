@@ -1,0 +1,16 @@
+# Core data + money
+pandas>=2.2
+pydantic>=2.7
+
+# LLM (Layer 2 only — imported solely by closo/llm_client.py)
+google-genai>=1.0
+
+# UI
+streamlit>=1.36
+plotly>=5.22
+
+# Config
+python-dotenv>=1.0
+
+# Tests
+pytest>=8.2

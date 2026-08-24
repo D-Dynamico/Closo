@@ -1,0 +1,21 @@
+# Working decision log — local only, see CLAUDE.md §15.1
+SESSION.md
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# SQLite audit log
+*.db
+*.sqlite3
+
+# Generated data — everything except the frozen demo set (§11.10)
+data/generated/*
+!data/generated/demo/
