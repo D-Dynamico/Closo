@@ -222,11 +222,35 @@ Pure functions, no LLM imports (enforced by test). For every `resolved`/`probabl
 
 1. **Existence:** every cited `payment_id`/`settlement_id`/`bank_txn_id` exists in the actual data. Any phantom ID → FAIL.
 2. **Arithmetic:** recompute `gross − mdr − gst ± rounding` from raw records with Decimal; must equal bank `credit_amount` exactly. The model's own arithmetic block is treated as a claim, not evidence.
-3. **Fee schedule validity:** the cited schedule must be the one active at `settled_at`.
+3. **Fee schedule validity:** the cited schedule must be the one active at `settled_at`. If it is not, the verdict is **capped at `probable`** rather than failed outright — see below.
 4. **Exclusivity:** cited payments not already consumed by another match (no double-spending a payment across two resolutions).
 5. **Refund consistency:** if hypothesis mentions refunds, refund records must exist and net correctly.
 
 PASS → status `AGENT_RESOLVED_VERIFIED`. FAIL → status `ESCALATED` with `verifier_rejection_reason`, and the failed verdict is preserved in the audit log (rejections are demo gold, not embarrassments). `probable` that passes verification still lands in a "needs human sign-off" sub-list on the escalation screen — verified math, unverified intent.
+
+### 8.1 The fee-schedule anomaly, and why check 3 caps rather than fails
+
+Check 3 as originally written contradicted §5.2. Error class E4 **is** the case where a
+payout ran on a superseded schedule, so the only correct verdict necessarily cites the
+inactive schedule — and a check that fails any such verdict would make E4 unresolvable by
+construction, while §5.2 lists it as a Layer 2 class.
+
+The resolution uses machinery §8 already describes. When a verdict cites a schedule that
+was not active at `settled_at`:
+
+- The arithmetic check still runs **in full** and must reproduce the bank credit exactly
+  under the cited schedule. Nothing is relaxed about the math.
+- The verdict is capped at `probable` and flagged `needs_human_signoff`.
+- `schedule_anomaly` is recorded on the result so the escalation screen can say *which*
+  schedule was applied and which should have been.
+
+That is precisely the "verified math, unverified intent" case: Closo can prove ₹X moved
+and prove which schedule produces ₹X, but it cannot know whether applying that schedule
+was authorised or a billing error. A machine should not silently decide that. It should
+show its work and hand a human the specific question.
+
+A verdict citing a schedule that reproduces **nothing** still fails outright — the cap
+applies to intent, never to arithmetic.
 
 ---
 
