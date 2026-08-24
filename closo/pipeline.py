@@ -24,7 +24,7 @@ from closo.audit import AuditLog
 from closo.config import DEMO_DIR, DEMO_SEED
 from closo.dataset_io import load_batch
 from closo.layer1_matcher import Layer1Result, run_layer1
-from closo.schemas import FinalStatus
+from closo.schemas import FinalStatus, MatchRecord
 from closo.taxonomy import GeneratedBatch
 
 #: Note attached to exceptions parked pending Layer 2. Kept explicit so the
@@ -145,3 +145,58 @@ def run_demo(
 ) -> RunOutcome:
     """Load the frozen demo set and reconcile it. No network, no API key."""
     return run(load_batch(data_dir), seed=DEMO_SEED, audit=audit, run_id=run_id)
+
+
+def replay(run_id: str, audit: AuditLog) -> RunOutcome:
+    """Rebuild a past run's outcome from the audit log alone.
+
+    Reads only ``runs`` and ``resolutions`` - it does not re-execute the
+    cascade. That is the point (10.1): if the network or the LLM API dies
+    on stage, replaying the last good run has to be indistinguishable from
+    having run it, and re-running the pipeline would not be a replay, it
+    would be a second run that might disagree.
+
+    Raises:
+        KeyError: if the run is not in the log. Better a clear failure than
+            an empty scorecard that looks like a run resolving nothing.
+    """
+    meta = audit.get_run(run_id)
+    if meta is None:
+        raise KeyError(f"no run {run_id!r} in the audit log")
+
+    outcome = RunOutcome(
+        run_id=run_id,
+        seed=meta["seed"],
+        started_at=datetime.fromisoformat(meta["started_at"]),
+    )
+    if meta["finished_at"]:
+        outcome.finished_at = datetime.fromisoformat(meta["finished_at"])
+        outcome.elapsed_seconds = (
+            outcome.finished_at - outcome.started_at
+        ).total_seconds()
+
+    replayed_matches = []
+    for record in audit.read_resolutions(run_id):
+        status = FinalStatus(record["final_status"])
+        txn_id = record["bank_txn_id"]
+        detail = record["detail"]
+        outcome.statuses[txn_id] = status
+        if status is FinalStatus.AUTO_MATCHED and detail.get("settlement_id"):
+            replayed_matches.append(
+                MatchRecord(
+                    bank_txn_id=txn_id,
+                    settlement_id=detail["settlement_id"],
+                    payment_ids=detail.get("payment_ids", []),
+                    pass_used=detail["pass_used"],
+                    tolerance_applied=detail.get("tolerance_applied", "0.00"),
+                )
+            )
+        elif "note" in detail:
+            outcome.notes[txn_id] = f"{detail.get('reason', 'escalated')}: {detail['note']}"
+
+    # A replayed outcome carries the matches so metrics.score can check the
+    # cited payment ids against ground truth exactly as it would live.
+    outcome.layer1 = Layer1Result(
+        matches=replayed_matches, total_bank_txns=len(outcome.statuses)
+    )
+    return outcome

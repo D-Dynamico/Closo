@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -102,16 +103,39 @@ class AuditLog:
 
     def __init__(self, path: Path | str = DB_PATH) -> None:
         self.path = str(path)
-        self.conn = sqlite3.connect(self.path)
+        # check_same_thread=False because Streamlit re-executes the script on a
+        # different thread for every interaction, so a connection opened during
+        # one rerun is used from another. Without this the first click of "Run
+        # reconciliation" raises ProgrammingError - which a boot check that only
+        # asserts HTTP 200 will not catch, because the page loads fine and the
+        # failure waits for the button.
+        #
+        # Dropping that guard makes the caller responsible for serializing
+        # access, hence the lock below and the _write/_read helpers. Every
+        # statement in this class goes through one of them.
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(SCHEMA)
-        self.conn.executescript(APPEND_ONLY_TRIGGERS)
-        self.conn.commit()
+        self._lock = threading.RLock()
+        with self._lock:
+            self.conn.executescript(SCHEMA)
+            self.conn.executescript(APPEND_ONLY_TRIGGERS)
+            self.conn.commit()
+
+    def _write(self, sql: str, params: tuple = (), commit: bool = True) -> None:
+        with self._lock:
+            self.conn.execute(sql, params)
+            if commit:
+                self.conn.commit()
+
+    def _read(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        with self._lock:
+            return self.conn.execute(sql, params).fetchall()
 
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def __enter__(self) -> AuditLog:
         return self
@@ -125,19 +149,17 @@ class AuditLog:
         self, run_id: str, seed: int, records_total: int, config: dict | None = None
     ) -> None:
         """Open a run. Idempotent so a replay can reuse an existing id."""
-        self.conn.execute(
+        self._write(
             "INSERT OR REPLACE INTO runs "
             "(run_id, seed, started_at, records_total, config_json) "
             "VALUES (?, ?, ?, ?, ?)",
             (run_id, seed, _now(), records_total, dumps(config or {})),
         )
-        self.conn.commit()
 
     def finish_run(self, run_id: str) -> None:
-        self.conn.execute(
+        self._write(
             "UPDATE runs SET finished_at = ? WHERE run_id = ?", (_now(), run_id)
         )
-        self.conn.commit()
 
     def record_event(
         self,
@@ -148,10 +170,11 @@ class AuditLog:
         payload: dict | None = None,
     ) -> None:
         """Append one event. There is no corresponding update or delete."""
-        self.conn.execute(
+        self._write(
             "INSERT INTO events (run_id, ts, layer, record_ref, event_type, payload_json)"
             " VALUES (?, ?, ?, ?, ?, ?)",
             (run_id, _now(), layer, record_ref, event_type, dumps(payload or {})),
+            commit=False,
         )
 
     def record_events(self, run_id: str, decisions: list) -> None:
@@ -161,7 +184,7 @@ class AuditLog:
                 run_id, decision.layer, decision.record_ref,
                 decision.event_type, decision.payload,
             )
-        self.conn.commit()
+        self.commit()
 
     def record_resolution(
         self,
@@ -171,7 +194,7 @@ class AuditLog:
         detail: dict | None = None,
         verifier_result: dict | None = None,
     ) -> None:
-        self.conn.execute(
+        self._write(
             "INSERT OR REPLACE INTO resolutions "
             "(run_id, bank_txn_id, final_status, pass_or_verdict_json, "
             "verifier_result_json) VALUES (?, ?, ?, ?, ?)",
@@ -179,25 +202,25 @@ class AuditLog:
                 run_id, bank_txn_id, final_status,
                 dumps(detail or {}), dumps(verifier_result or {}),
             ),
+            commit=False,
         )
 
     def commit(self) -> None:
-        self.conn.commit()
+        with self._lock:
+            self.conn.commit()
 
     # -- reads -------------------------------------------------------------
 
     def latest_run_id(self) -> str | None:
         """The most recently started run. Backs the Replay button (10.1)."""
-        row = self.conn.execute(
+        rows = self._read(
             "SELECT run_id FROM runs ORDER BY started_at DESC, rowid DESC LIMIT 1"
-        ).fetchone()
-        return row["run_id"] if row else None
+        )
+        return rows[0]["run_id"] if rows else None
 
     def get_run(self, run_id: str) -> dict | None:
-        row = self.conn.execute(
-            "SELECT * FROM runs WHERE run_id = ?", (run_id,)
-        ).fetchone()
-        return dict(row) if row else None
+        rows = self._read("SELECT * FROM runs WHERE run_id = ?", (run_id,))
+        return dict(rows[0]) if rows else None
 
     def read_events(self, run_id: str) -> list[dict]:
         """Every event for a run, in the order it happened.
@@ -206,9 +229,9 @@ class AuditLog:
         millisecond, and a replay that reorders them tells a different story
         from the one that occurred.
         """
-        rows = self.conn.execute(
+        rows = self._read(
             "SELECT * FROM events WHERE run_id = ? ORDER BY event_id", (run_id,)
-        ).fetchall()
+        )
         events = []
         for row in rows:
             event = dict(row)
@@ -217,10 +240,10 @@ class AuditLog:
         return events
 
     def read_resolutions(self, run_id: str) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self._read(
             "SELECT * FROM resolutions WHERE run_id = ? ORDER BY bank_txn_id",
             (run_id,),
-        ).fetchall()
+        )
         out = []
         for row in rows:
             record = dict(row)
@@ -232,18 +255,17 @@ class AuditLog:
     # -- API response cache ------------------------------------------------
 
     def cache_get(self, cache_key: str) -> dict | None:
-        row = self.conn.execute(
+        rows = self._read(
             "SELECT response_json FROM api_cache WHERE cache_key = ?", (cache_key,)
-        ).fetchone()
-        return json.loads(row["response_json"]) if row else None
+        )
+        return json.loads(rows[0]["response_json"]) if rows else None
 
     def cache_put(self, cache_key: str, response: dict) -> None:
-        self.conn.execute(
+        self._write(
             "INSERT OR REPLACE INTO api_cache (cache_key, response_json, fetched_at)"
             " VALUES (?, ?, ?)",
             (cache_key, dumps(response), _now()),
         )
-        self.conn.commit()
 
 
 def _now() -> str:
