@@ -1,0 +1,17 @@
+# Closo writes every generated file with LF and the determinism test in
+# section 12.1 compares file hashes. Without this, Git checks the frozen
+# demo set out as CRLF on Windows, the generator regenerates it as LF, and
+# a fresh clone fails determinism for reasons that have nothing to do with
+# the generator. Pin LF everywhere.
+* text=auto eol=lf
+
+*.csv   text eol=lf
+*.json  text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+Makefile text eol=lf
+
+# Never let Git touch these.
+*.png binary
+*.db  binary
