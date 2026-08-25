@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
-from closo.config import DEMO_DIR, ZERO, money
+from closo.config import DEMO_DIR, INR_PER_MILLION_TOKENS, ZERO, money
 from closo.dataset_io import load_ground_truth
 from closo.pipeline import PENDING_NOTE, RunOutcome
 from closo.schemas import FinalStatus
@@ -85,7 +85,20 @@ class Scorecard:
     taxonomy: dict[str, ClassBreakdown] = field(default_factory=dict)
 
     elapsed_seconds: float = 0.0
+
+    # -- what the run spent (9.2) -----------------------------------------
+    #
+    # Requests, not tokens, are the scarce resource on this quota (7.4), so
+    # both are reported and requests is the one to read. A cached or
+    # replayed run shows zero requests and that is the true figure: it
+    # spent none.
     tokens_used: int = 0
+    requests_made: int = 0
+    cache_hits: int = 0
+    exceptions_investigated: int = 0
+    exceptions_skipped: int = 0
+    layer2_seconds: float = 0.0
+    quota_exhausted: bool = False
 
     # -- derived -----------------------------------------------------------
 
@@ -113,13 +126,57 @@ class Scorecard:
             return 0.0
         return self.total_bank_txns / self.elapsed_seconds * 60
 
+    @property
+    def layer1_records_per_minute(self) -> float:
+        """Throughput of the deterministic cascade alone (9.2).
+
+        Reported separately because it is enormous, and averaging it with
+        Layer 2 hides both facts: that 83% of the batch is reconciled in
+        milliseconds, and that the remainder costs seconds per record
+        because it is talking to a model.
+        """
+        layer1_seconds = self.elapsed_seconds - self.layer2_seconds
+        if layer1_seconds <= 0:
+            return 0.0
+        return self.total_bank_txns / layer1_seconds * 60
+
+    @property
+    def tokens_per_record(self) -> float:
+        if not self.total_bank_txns:
+            return 0.0
+        return self.tokens_used / self.total_bank_txns
+
+    @property
+    def rupees_spent(self) -> Decimal:
+        """What the tokens cost at the configured rate.
+
+        Zero on the free tier, which is the honest figure rather than a
+        placeholder - see ``INR_PER_MILLION_TOKENS``.
+        """
+        return money(
+            Decimal(self.tokens_used) * INR_PER_MILLION_TOKENS / Decimal(1_000_000)
+        )
+
+    @property
+    def rupees_per_record(self) -> Decimal:
+        if not self.total_bank_txns:
+            return ZERO
+        return money(self.rupees_spent / Decimal(self.total_bank_txns))
+
     def stable_dict(self) -> dict:
         """The scorecard minus anything that legitimately varies per run.
 
         Timing and run id change between two runs of the same seed by
         definition, so the determinism test in 12.6 compares this rather
         than the whole object. Excluding them is not weakening the check:
-        every *measured* quantity is still in here.
+        every *measured reconciliation* quantity is still in here.
+
+        Cost is excluded for the same reason, and it is worth being
+        explicit about why: a live run and a replay of that same run
+        produce byte-identical reconciliation figures while spending
+        different numbers of requests, because the replay spends none.
+        What the run cost is a fact about the run, not about the batch. It
+        is asserted directly instead, including across a replay.
         """
         return {
             "seed": self.seed,
@@ -171,6 +228,13 @@ def score(
         seed=outcome.seed,
         total_bank_txns=len(outcome.statuses),
         elapsed_seconds=outcome.elapsed_seconds,
+        tokens_used=outcome.cost.tokens_used,
+        requests_made=outcome.cost.requests_made,
+        cache_hits=outcome.cost.cache_hits,
+        exceptions_investigated=outcome.cost.exceptions_investigated,
+        exceptions_skipped=outcome.cost.exceptions_skipped,
+        layer2_seconds=outcome.cost.layer2_seconds,
+        quota_exhausted=outcome.cost.quota_exhausted,
     )
 
     # Both layers' claims, graded the same way. An agent resolution that

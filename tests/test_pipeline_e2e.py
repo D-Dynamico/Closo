@@ -1057,3 +1057,88 @@ def test_a_verdict_may_not_cite_payments_layer_1_already_spent() -> None:
     assert outcome.verifications["EX-001"].rejection_reason == "exclusivity_violation"
     assert outcome.statuses["bt_C3"] is FinalStatus.ESCALATED
     assert outcome.agent_matches == {}
+
+
+# --------------------------------------------------------------------------
+# Cost metrics (9.2)
+# --------------------------------------------------------------------------
+
+
+def test_the_scorecard_reports_what_the_run_spent(full_card) -> None:
+    """12.6 asks for cost-per-record when the client reports tokens. The
+    figure is per *record*, not per exception, because that is the number
+    that scales against a batch and the one a finance team would compare
+    against an analyst's hour."""
+    assert full_card.tokens_used > 0
+    assert full_card.requests_made > 0
+    assert full_card.tokens_per_record == pytest.approx(
+        full_card.tokens_used / full_card.total_bank_txns
+    )
+
+
+def test_requests_are_reported_alongside_tokens(full_card) -> None:
+    """Requests are the scarce resource on this quota (7.4), not tokens. A
+    cost line showing only tokens would be measuring the thing that never
+    runs out."""
+    assert full_card.exceptions_investigated > 0
+    assert full_card.requests_made >= full_card.exceptions_investigated
+
+
+def test_a_layer_1_only_run_costs_nothing(card) -> None:
+    """No investigator, no requests. The zero has to be a real zero rather
+    than an absent field, or the Scorecard cannot tell "free" from
+    "unknown"."""
+    assert card.tokens_used == 0
+    assert card.requests_made == 0
+    assert card.rupees_spent == Decimal("0.00")
+
+
+def test_the_free_tier_costs_zero_rupees_and_says_so(full_card) -> None:
+    """The default rate is zero because the run genuinely is free. A
+    made-up price on a judged scorecard would be a fabricated number, not
+    a conservative one."""
+    from closo.config import INR_PER_MILLION_TOKENS
+
+    assert INR_PER_MILLION_TOKENS == 0
+    assert full_card.rupees_spent == Decimal("0.00")
+    assert full_card.rupees_per_record == Decimal("0.00")
+
+
+def test_a_configured_rate_produces_a_real_cost_line(full_card) -> None:
+    """The line must not be dead code that only ever prints zero: with a
+    rate set it has to compute, in Decimal, at 2dp."""
+    import closo.metrics as module
+
+    original = module.INR_PER_MILLION_TOKENS
+    module.INR_PER_MILLION_TOKENS = Decimal("1000")
+    try:
+        expected = Decimal(full_card.tokens_used) * Decimal("1000") / Decimal(1_000_000)
+        assert full_card.rupees_spent == expected.quantize(Decimal("0.01"))
+        assert full_card.rupees_per_record > 0
+    finally:
+        module.INR_PER_MILLION_TOKENS = original
+
+
+def test_layer_1_throughput_is_reported_separately(full_card) -> None:
+    """9.2 asks for it separately because averaging the two hides both
+    facts: that most of the batch clears in milliseconds, and that the
+    remainder costs seconds per record because it is talking to a model."""
+    assert full_card.layer1_records_per_minute > full_card.records_per_minute
+
+
+def test_cost_metrics_survive_an_empty_run() -> None:
+    outcome = run(GeneratedBatch(), seed=DEMO_SEED)
+    empty = score(outcome, GeneratedBatch(), DEMO_DIR)
+    assert empty.tokens_per_record == 0.0
+    assert empty.rupees_per_record == Decimal("0.00")
+    assert empty.layer1_records_per_minute == 0.0
+
+
+def test_cost_is_deliberately_outside_the_determinism_diff(full_card) -> None:
+    """A live run and a replay of it produce byte-identical reconciliation
+    figures while spending different numbers of requests, because the
+    replay spends none. What a run cost is a fact about the run, not about
+    the batch - so it is asserted directly rather than diffed."""
+    stable = full_card.stable_dict()
+    for key in ("tokens_used", "requests_made", "cache_hits"):
+        assert key not in stable

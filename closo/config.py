@@ -70,6 +70,13 @@ MAX_TOOL_CALLS_PER_EXCEPTION = 8  # 7.3
 # is set well clear of a legitimate full-length investigation.
 EXCEPTION_TIMEOUT_SECONDS = 90
 
+# Rupees per million tokens, for the cost line on the Scorecard (9.2). Zero
+# by default because this runs on the free tier and a run genuinely costs
+# nothing - and a made-up price on a judged scorecard is a fabricated
+# number, not a conservative one. Set INR_PER_MILLION_TOKENS in .env to the
+# published paid rate to see what the same batch would cost billed.
+INR_PER_MILLION_TOKENS: Decimal = Decimal(os.getenv("INR_PER_MILLION_TOKENS") or "0")
+
 # --------------------------------------------------------------------------
 # Money
 # --------------------------------------------------------------------------

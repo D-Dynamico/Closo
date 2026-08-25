@@ -151,3 +151,33 @@ E4 and carry a sign-off flag.
 written for it — dropping the credit-claim check, dropping the consumed-payment seeding,
 never skipping a covered credit, dropping agent resolutions from the metrics grading,
 never recording the sign-off flag, and forgetting agent resolutions on replay.
+
+---
+
+## Substep 3 — cost metrics — 2026-08-25
+
+**Done:** the Scorecard now reports what a run spent — tokens, requests, cache hits,
+exceptions investigated and skipped — plus tokens and rupees per record and Layer 1's
+throughput on its own. 8 new tests; full suite **409 passing**.
+
+**Decisions:**
+
+- **The default price is zero rupees per million tokens, and that is the honest figure.**
+  This runs on the free tier: the run costs nothing. Inventing a plausible per-token price
+  for a judged scorecard would be a fabricated number, not a conservative one. The rate is
+  `INR_PER_MILLION_TOKENS` in `.env` for anyone who wants to see the same batch priced at a
+  published paid rate, and a test sets it to prove the line computes rather than only ever
+  printing zero.
+
+- **Requests are reported next to tokens, and are the figure to read** (7.4). A cost line
+  showing only tokens would be measuring the one resource that never runs out on this quota.
+  A cached or replayed run shows zero requests, which is the true number: it spent none.
+
+- **Layer 1's throughput is reported separately** (9.2), because averaging it with Layer 2
+  hides both halves of the story — most of the batch clears in milliseconds, and the
+  remainder costs seconds per record because it is talking to a model.
+
+- **Cost is deliberately outside `stable_dict()`**, and the docstring now says why: a live
+  run and a replay of that same run produce byte-identical reconciliation figures while
+  spending different numbers of requests. What a run cost is a fact about the run, not about
+  the batch, so it is asserted directly — including across a replay — rather than diffed.
