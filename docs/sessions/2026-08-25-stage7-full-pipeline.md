@@ -433,3 +433,55 @@ verdict (3), dropping the verifier's checklist (2).
 
 **Note:** `pipeline.py` is now 333 code lines against §11.9's ~300, up from 311. The
 Layer 2/3 orchestration is the part that would split out cleanly.
+
+---
+
+## Substep 2 — the run narrator — 2026-08-25
+
+**Done:** `closo/narration.py` — pure functions turning a run's audit events into
+`RunStory`: Layer 1's counts per pass, then one `ExceptionStory` per exception carrying
+ordered `Step`s (tool calls → verdict → the verifier, separately) and the one line that
+closes the block. 27 new tests; full suite **461 passing**.
+
+**Decisions:**
+
+- **The Live-run screen will narrate the log, not watch the pipeline.** A full run finishes
+  in ~170 ms, so there is no live process to watch; what exists is an append-only record of
+  exactly what happened, in order. Narrating it means a live run and a replayed one take the
+  identical path through identical code, which is what §10.1 asks for. The alternative — an
+  `on_event` callback threaded through `pipeline.run()` — would stream a 170 ms cached run,
+  so the realism is staged either way, and it would add a callback path the pipeline does
+  not otherwise need.
+
+- **Pure, and outside the app.** No Streamlit import, no pacing, no colours: the screen
+  decides how slowly to reveal these and what they look like. That keeps the part with all
+  the judgement in it testable without `AppTest`, and 27 of the 27 tests run in
+  milliseconds.
+
+- **The narrator accepts both logging conventions.** The investigator logs against the
+  exception id; the pipeline logs against the bank credit and names the exception in the
+  payload. Both are right for their own purpose, so the narrator reads either rather than
+  forcing one to change. Dropping either convention halves every story — the mutation that
+  removes one fails 5 tests.
+
+- **Four endings, deliberately worded apart** — verified, verified-but-needs-sign-off,
+  proposed-and-rejected, and never-answered. §10.5 makes "agent proposed, verifier rejected"
+  the strongest thing on the screen, and it is worth nothing if the screen renders it the
+  same as "we could not work this one out".
+
+**Surprises:**
+
+- **The first version put a red ✗ against every honest escalation.** An `unresolvable`
+  verdict makes the verifier return `passed=False` — accurately, since nothing was proposed —
+  and the narrator was reading that as a failed verification. So all four E9/E10 rows, the
+  designed-unresolvable ones the whole "escalation is success, not failure" argument rests
+  on, would have appeared on the Live-run screen as the verifier catching the agent out.
+  Wrong twice over: it credits the verifier with a catch nobody proposed, and it puts a
+  failure mark against the outcome this project argues is correct. `verified` is now `None`
+  when nothing was claimed, and the stamp carries no mark at all. Found by reading the
+  narrator's own output against a real run, not from a failing test.
+
+**Verified:** 461 passing. Mutation-tested five ways, all caught — treating an unresolvable
+verdict as rejected, collapsing the sign-off ending into plain "resolved", understanding
+only one of the two logging conventions, hiding the rejection reason, and dropping skipped
+exceptions.

@@ -125,6 +125,7 @@ closo/
 │   ├── tools.py               # tool implementations the LLM calls (query local SQLite/CSV, cached RZP API)
 │   ├── audit.py               # SQLite audit log writer/reader (§9)
 │   ├── metrics.py             # scorecard computation (§9)
+│   ├── narration.py           # audit events → the Live-run story (§10)
 │   ├── pipeline.py            # orchestrator: run(batch) → RunResult
 │   └── rzp_client.py          # thin Razorpay test-mode client with SQLite response cache
 ├── app/
