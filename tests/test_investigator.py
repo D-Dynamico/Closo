@@ -189,13 +189,19 @@ def test_a_custom_budget_is_respected(toolbox) -> None:
 
 
 def test_a_slow_investigation_times_out(toolbox) -> None:
-    """A stalled exception yields unresolvable rather than hanging the run."""
+    """A stalled exception yields unresolvable rather than hanging the run.
+
+    The timeout is passed explicitly rather than taken from config, so
+    retuning the real one - as the first live run required - does not break
+    a test that is about the mechanism, not the value.
+    """
     ticks = iter([0.0, 1.0, 45.0, 46.0, 47.0])
     agent = Investigator(
         toolbox,
         MockLLMClient(
             [LLMResponse(tool_calls=[ToolCall("get_fee_schedules", {})])] * 5
         ),
+        timeout_seconds=30,
         clock=lambda: next(ticks),
     )
     outcome = agent.investigate(an_exception())
@@ -207,10 +213,29 @@ def test_a_timeout_is_recorded(toolbox) -> None:
     ticks = iter([0.0, 99.0, 100.0])
     agent = Investigator(
         toolbox, MockLLMClient([LLMResponse(tool_calls=[verdict_call()])]),
-        clock=lambda: next(ticks),
+        timeout_seconds=30, clock=lambda: next(ticks),
     )
     outcome = agent.investigate(an_exception())
     assert any(e["event_type"] == "timeout" for e in outcome.events)
+
+
+def test_the_timeout_allows_a_full_length_investigation(toolbox) -> None:
+    """The bound that the first live run showed was contradictory.
+
+    Eight tool calls means nine requests, and at the measured ~4s per
+    request the original 30s fired before the tool budget could ever be
+    spent - the timeout was silently capping work rather than catching a
+    stall. Two limits that cannot both be reached are one limit and a bug.
+    """
+    from closo.config import EXCEPTION_TIMEOUT_SECONDS, MAX_TOOL_CALLS_PER_EXCEPTION
+
+    observed_seconds_per_request = 4.0
+    requests_for_a_full_investigation = MAX_TOOL_CALLS_PER_EXCEPTION + 1
+    needed = requests_for_a_full_investigation * observed_seconds_per_request
+    assert EXCEPTION_TIMEOUT_SECONDS > needed, (
+        f"timeout {EXCEPTION_TIMEOUT_SECONDS}s cannot fit "
+        f"{requests_for_a_full_investigation} requests at {observed_seconds_per_request}s"
+    )
 
 
 def test_one_slow_exception_does_not_kill_the_batch(toolbox) -> None:

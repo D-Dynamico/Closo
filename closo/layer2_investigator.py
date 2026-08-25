@@ -65,7 +65,19 @@ HOW YOU WORK
 RULES THAT DECIDE THE OUTCOME
 
 - You have at most 8 tool calls. Spend them on ruling things out, not on
-  confirming what you already believe.
+  confirming what you already believe. Never repeat a call you have already
+  made with the same arguments - you already have that answer.
+- IF THE AMOUNT DOES NOT RECONCILE UNDER THE SCHEDULE RECORDED ON THE
+  SETTLEMENT, COMPUTE IT UNDER THE OTHER ONE BEFORE CONCLUDING ANYTHING.
+  A payout run on a superseded fee schedule is a specific, common failure,
+  and it is invisible unless you actually compute the alternative. Citing a
+  schedule you did not compute under is worse than saying unresolvable: the
+  verifier will reject the figures and the exception is escalated anyway.
+- If check_duplicate_utr shows ONE settlement paid across TWO credits, that
+  is a split payout. Check whether the two credits SUM to the settlement net,
+  and if they do, cite both - the second one goes in extra_bank_txn_ids.
+  Two settlements sharing one UTR is a different problem: a duplicated
+  reference, where each credit belongs to its own settlement by amount.
 - Never invent an id. If a tool says not_found, that record does not exist and
   that fact is itself informative.
 - If two explanations both fit the evidence, answer `probable`, not `resolved`.
@@ -85,7 +97,14 @@ RETRY_PROMPT = (
     "with confidence `unresolvable` - that is a valid outcome."
 )
 
-TRANSIENT_ERRORS = ("429", "503", "529", "overloaded", "rate limit", "unavailable")
+TRANSIENT_ERRORS = (
+    "429", "503", "529", "overloaded", "rate limit", "unavailable",
+    "resource_exhausted",
+)
+
+#: Pause before retrying a transient error. Comfortably longer than one
+#: request slot at the free-tier rate, so a retry lands in clear air.
+TRANSIENT_BACKOFF_SECONDS = 8.0
 
 
 @dataclass
@@ -274,6 +293,10 @@ class Investigator:
             if not _is_transient(error):
                 raise
             self._log(outcome, item, "api_error_retry", error=str(error))
+            # Back off first. Retrying a 429 immediately is how one rate-limit
+            # error becomes two, and the budget guard cannot pace a retry it
+            # was never told about.
+            time.sleep(TRANSIENT_BACKOFF_SECONDS)
             return self.client.generate(SYSTEM_PROMPT, messages, ALL_TOOLS, force)
 
     def _run_tools(

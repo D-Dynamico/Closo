@@ -57,7 +57,18 @@ GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_RPD_LIMIT = 500  # measured 2026-08-24; the budget guard counts against this
 GEMINI_RPM_LIMIT = 15
 MAX_TOOL_CALLS_PER_EXCEPTION = 8  # 7.3
-EXCEPTION_TIMEOUT_SECONDS = 30  # 7.3
+
+# Raised from the 30s in 7.3 after the first real-API run, where the two
+# bounds turned out to contradict each other. Measured latency on
+# gemini-3.5-flash-lite is ~4s per request, so a full eight-call
+# investigation needs nine requests and about 36 seconds - the timeout fired
+# before the tool budget could ever be spent, and one exception died at three
+# calls with the model mid-investigation.
+#
+# The tool budget is the meaningful control, since requests are the scarce
+# resource (7.4). The timeout exists to catch a stall, not to cap work, so it
+# is set well clear of a legitimate full-length investigation.
+EXCEPTION_TIMEOUT_SECONDS = 90
 
 # --------------------------------------------------------------------------
 # Money
