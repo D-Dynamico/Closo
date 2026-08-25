@@ -1,8 +1,11 @@
 """Closo — Streamlit entry point.
 
-Two screens are live: Ingest and Scorecard. The rest are stubs that name
-the stage they arrive in, so the sidebar shows the whole shape of the
-product rather than pretending the built half is all there is.
+All five screens (WORKFLOWS 10). Ingest and Scorecard read the run in
+session state; Live run, the drill-down and the escalation queue are built
+on the audit log instead, through `closo.narration`, so a replayed run and
+a live one render through identical code - and so a settlement-side
+exception, which has no bank credit and therefore no resolutions row, still
+has its investigation to show.
 
 The colour code is global and fixed (WORKFLOWS 10): green for
 deterministic matches, amber for agent proposals that passed verification,
@@ -12,6 +15,8 @@ glance at any screen means the same thing.
 
 from __future__ import annotations
 
+import os
+import time
 from decimal import Decimal
 
 import pandas as pd
@@ -23,6 +28,14 @@ from closo.config import DB_PATH, DEMO_DIR, DEMO_MODE, DEMO_SEED
 from closo.dataset_io import load_batch
 from closo.layer2_investigator import Investigator
 from closo.metrics import Scorecard, score_demo
+from closo.narration import (
+    ExceptionStory,
+    RunStory,
+    Step,
+    escalations,
+    narrate,
+    unblock_hint,
+)
 from closo.pipeline import RunOutcome, replay, run_demo
 from closo.response_cache import DEMO_CACHE_PATH, JSONResponseStore, CachedLLMClient
 from closo.tools import ToolBox
@@ -32,11 +45,16 @@ COLOR_VERIFIED = "#FAC775"   # amber  — Layer 2 proposal that passed Layer 3
 COLOR_ESCALATED = "#F09595"  # red    — unresolved, honestly reported
 
 SCREENS = ["Ingest", "Live run", "Scorecard", "Exception drill-down", "Escalation queue"]
-PENDING_STAGE = {
-    "Live run": "Stage 8",
-    "Exception drill-down": "Stage 8",
-    "Escalation queue": "Stage 8",
-}
+
+# Pacing for the Live-run screen. The verifier's line is deliberately the
+# slow one (10): verification has to *read* as a separate step, because the
+# claim this whole project makes is that it is one. Set CLOSO_PACING=0 to
+# render instantly - the scripted UI tests do, or they would spend a minute
+# each watching sleeps.
+_PACING = float(os.getenv("CLOSO_PACING", "1") or 0)
+STEP_DELAY = 0.06 * _PACING
+VERIFIER_DELAY = 0.30 * _PACING
+COUNTER_DELAY = 0.05 * _PACING
 
 
 @st.cache_resource
@@ -332,6 +350,345 @@ def _taxonomy_frame(card: Scorecard) -> pd.DataFrame:
     return frame.sort_values("_order").drop(columns="_order")
 
 
+# --------------------------------------------------------------------------
+# Live run (WORKFLOWS 10, screen 2)
+# --------------------------------------------------------------------------
+
+
+def current_story() -> RunStory | None:
+    """The story of the run on screen, read from the audit log.
+
+    Every screen below is built on this rather than on the in-memory
+    outcome, so a replayed run and a live one render through identical
+    code. The log is the only source that carries a settlement-side
+    exception's investigation at all (9.1).
+    """
+    run_id = st.session_state.get("run_id")
+    if not run_id:
+        return None
+    return narrate(get_audit_log().read_events(run_id))
+
+
+def screen_live_run() -> None:
+    """Layer 1's counter, then the exception queue, paced.
+
+    The pacing is deliberate and the verifier's line is deliberately late
+    (10): verification has to *read* as a separate step, because the claim
+    this project makes is that it is one. It plays once per run - replaying
+    the animation on every sidebar click would be theatre rather than
+    information - and the button puts it back.
+    """
+    story = current_story()
+    if story is None:
+        st.info("No run yet. Head to **Ingest** and press Run reconciliation.", icon="👈")
+        return
+
+    run_id = st.session_state["run_id"]
+    played = st.session_state.get("played_run") == run_id
+    if played and st.button("Play again"):
+        played = False
+    st.session_state["played_run"] = run_id
+
+    _render_layer1(story, animate=not played)
+
+    if not story.investigated and not any(t.skipped for t in story.exceptions):
+        st.warning(
+            "Layer 2 did not run, so the exceptions below carry no "
+            "investigation. They are escalated as unexamined, not as unsolvable.",
+            icon="🚧",
+        )
+
+    st.subheader(f"Exception queue — {len(story.exceptions)}")
+    for told in story.exceptions:
+        _render_exception(told, animate=not played)
+
+
+def _render_layer1(story: RunStory, animate: bool) -> None:
+    """The fast counter. Layer 1's speed is part of the argument (9.2)."""
+    st.subheader("Layer 1 — deterministic cascade")
+    counter = st.empty()
+    if animate:
+        for shown in _counter_steps(story.layer1.matched):
+            counter.metric("Matched", f"{shown} / {story.layer1.total_bank_txns}")
+            time.sleep(COUNTER_DELAY)
+    counter.metric(
+        "Matched", f"{story.layer1.matched} / {story.layer1.total_bank_txns}",
+        delta=f"{story.layer1.match_rate:.1%} auto-matched",
+    )
+    passes = " · ".join(
+        f"{name.split('_')[0]}: {count}"
+        for name, count in sorted(story.layer1.passes.items())
+    )
+    st.caption(f"{passes} — {story.layer1.exceptions} exceptions left for Layer 2")
+
+
+def _counter_steps(target: int, steps: int = 8) -> list[int]:
+    """A handful of intermediate values, never more than the target."""
+    if target <= 0:
+        return []
+    stride = max(1, target // steps)
+    return [*range(stride, target, stride)]
+
+
+def _render_exception(told: ExceptionStory, animate: bool) -> None:
+    """One exception, as an expandable block that ends on the verifier."""
+    header = (
+        f"{told.exception_id} · {told.record_ref} · {told.reason}"
+        f" — {_status_summary(told)}"
+    )
+    with st.status(header, expanded=True, state=_status_state(told)):
+        if told.detail:
+            st.caption(told.detail)
+        for step in told.steps:
+            if animate:
+                time.sleep(VERIFIER_DELAY if step.kind == "verification" else STEP_DELAY)
+            _render_step(step)
+        st.markdown(f"**{told.outcome_label}**")
+
+
+def _render_step(step: Step) -> None:
+    if step.kind == "tool_call":
+        st.markdown(f"`{step.label}`")
+    elif step.kind == "verdict":
+        st.markdown(f"→ {step.label}")
+    elif step.kind == "verification":
+        mark = {True: "✓", False: "✗", None: "—"}[step.ok]
+        st.markdown(f"**{mark} verifier** · {step.label}")
+    else:
+        st.markdown(f"_{step.label}_")
+
+
+def _status_summary(told: ExceptionStory) -> str:
+    """The outcome, in words, in the block's own header.
+
+    `st.status` draws its own tick for a completed block, meaning "this
+    finished" - which on a screen where ✓ and ✗ are the *verifier's*
+    vocabulary reads as "this reconciled". Two of them side by side was
+    worse still. So the mark is left to Streamlit and the meaning is
+    carried by words, which cannot be misread as a verdict.
+    """
+    if told.skipped:
+        return "already covered"
+    if told.verified and told.effective_confidence == "probable":
+        return "verified, needs sign-off"
+    if told.verified:
+        return "verified"
+    if told.rejection_reason:
+        return "verifier rejected"
+    return "escalated"
+
+
+def _status_state(told: ExceptionStory) -> str:
+    """`st.status` state. Only a verifier rejection is an error.
+
+    An exception nobody could explain is not a failure of the run - E9 and
+    E10 are supposed to end here - so they are marked complete, not errored.
+    """
+    return "error" if told.rejection_reason else "complete"
+
+
+# --------------------------------------------------------------------------
+# Exception drill-down (WORKFLOWS 10, screen 4)
+# --------------------------------------------------------------------------
+
+
+def screen_drilldown() -> None:
+    """One exception, in full: hypothesis, evidence, arithmetic, verification.
+
+    This is the screen the pitch rests on. It has to show the whole chain
+    for a single record - what was considered and dropped, what was
+    actually called and what came back, the arithmetic, and then a
+    verifier's checklist that was computed from the raw records rather than
+    from any of the above.
+    """
+    story = current_story()
+    if story is None:
+        st.info("No run yet. Head to **Ingest** and press Run reconciliation.", icon="👈")
+        return
+
+    investigated = [told for told in story.exceptions if told.investigated]
+    if not investigated:
+        st.warning(
+            "Layer 2 did not run for this run, so there is no investigation to "
+            "show. Every exception is escalated as unexamined.",
+            icon="🚧",
+        )
+        return
+
+    labels = {
+        f"{t.exception_id} · {t.record_ref} · {t.reason}": t for t in investigated
+    }
+    chosen = st.selectbox("Exception", list(labels), index=_default_index(labels))
+    told = labels[chosen]
+    verdict = _verdict_of(told)
+
+    st.markdown(f"### {told.exception_id} — {told.record_ref}")
+    st.caption(f"Layer 1 stopped here: **{told.reason}** — {told.detail}")
+
+    st.markdown("#### Hypothesis")
+    st.markdown(verdict.get("hypothesis") or "_none recorded_")
+
+    rejected = verdict.get("hypotheses_rejected") or []
+    if rejected:
+        st.markdown("#### Considered and ruled out")
+        for entry in rejected:
+            st.markdown(
+                f"- ~~{entry.get('hypothesis', '')}~~ — {entry.get('reason', '')}"
+            )
+
+    st.markdown("#### Evidence")
+    evidence = verdict.get("evidence") or []
+    if evidence:
+        for item in evidence:
+            with st.expander(f"{item.get('tool')}({_args(item.get('args'))})"):
+                st.code(item.get("result_summary", ""), language="json")
+    else:
+        for step in told.tool_calls:
+            st.markdown(f"`{step.label}`")
+
+    _render_arithmetic(verdict)
+    _render_checklist(told)
+
+
+def _default_index(labels: dict) -> int:
+    """Open on a sign-off case when there is one.
+
+    An E4 tells the best story on this screen - proven math, unproven
+    intent - and it is what §13's Stage 9 says to show on stage.
+    """
+    for index, told in enumerate(labels.values()):
+        if told.schedule_anomaly:
+            return index
+    return 0
+
+
+def _verdict_of(told: ExceptionStory) -> dict:
+    for step in told.steps:
+        if step.kind == "verdict":
+            return step.detail
+    return {}
+
+
+def _args(args: dict | None) -> str:
+    return ", ".join(f"{k}={v}" for k, v in sorted((args or {}).items()))
+
+
+def _render_arithmetic(verdict: dict) -> None:
+    """The claimed arithmetic, monospaced (10).
+
+    Labelled a claim on the screen as well as in the code, because the next
+    section is what happens when someone checks it.
+    """
+    match = verdict.get("proposed_match") or {}
+    block = match.get("arithmetic") or {}
+    if not block:
+        return
+
+    st.markdown("#### Arithmetic — the agent's claim")
+    st.code(
+        f"payments   {', '.join(match.get('payment_ids', []))}\n"
+        f"schedule   {match.get('fee_schedule')}\n"
+        f"gross      {block.get('gross'):>14}\n"
+        f"mdr        {block.get('mdr'):>14}\n"
+        f"gst        {block.get('gst'):>14}\n"
+        f"rounding   {block.get('rounding', '0.00'):>14}\n"
+        f"net        {block.get('net'):>14}",
+        language="text",
+    )
+
+
+def _render_checklist(told: ExceptionStory) -> None:
+    """The verifier's own checks, one line each.
+
+    Recomputed from raw records - not read off the block above. That is the
+    whole claim, so the screen says it in the heading rather than leaving
+    it to be inferred.
+    """
+    st.markdown("#### Verification — recomputed from raw records")
+    stamp = next((s for s in told.steps if s.kind == "verification"), None)
+    if stamp is None:
+        st.markdown("_this verdict never reached the verifier_")
+        return
+
+    checks = (stamp.detail.get("result") or {}).get("checks") or []
+    for check in checks:
+        mark = "✓" if check.get("passed") else "✗"
+        st.markdown(f"{mark} **{check.get('check')}** — {check.get('detail')}")
+
+    if told.schedule_anomaly:
+        st.warning(
+            f"{told.schedule_anomaly}. The arithmetic is proven; whether "
+            "applying that schedule was authorised is not something Closo can "
+            "know, so this is capped at **probable** and handed to a human.",
+            icon="✍️",
+        )
+    st.markdown(f"**{told.outcome_label}**")
+
+
+# --------------------------------------------------------------------------
+# Escalation queue (WORKFLOWS 10, screen 5)
+# --------------------------------------------------------------------------
+
+
+def screen_escalations() -> None:
+    """What is still open, what was tried, and what would unblock it.
+
+    Rejections sort first. "The agent proposed this and the verifier threw
+    it out" is the most informative row here and the one a human should
+    read before anything else (10.5).
+    """
+    story = current_story()
+    if story is None:
+        st.info("No run yet. Head to **Ingest** and press Run reconciliation.", icon="👈")
+        return
+
+    open_items = escalations(story)
+    if not open_items:
+        st.success("Nothing escalated in this run.", icon="✅")
+        return
+
+    rejected = [t for t in open_items if t.rejection_reason]
+    st.markdown(
+        f"**{len(open_items)}** open — "
+        f"{len(rejected)} proposed and rejected by the verifier, "
+        f"{len(open_items) - len(rejected)} nobody could explain."
+    )
+    st.caption(
+        "An empty list would be the suspicious result. Two error classes in "
+        "this dataset are unresolvable by construction; a run that resolves "
+        "one has a bug."
+    )
+
+    for told in open_items:
+        _render_escalation(told)
+
+
+def _render_escalation(told: ExceptionStory) -> None:
+    icon = "✗" if told.rejection_reason else "—"
+    label = f"{icon} {told.exception_id} · {told.record_ref} · {told.reason}"
+    with st.expander(label, expanded=bool(told.rejection_reason)):
+        if told.rejection_reason:
+            st.error(
+                f"Agent proposed, verifier rejected: **{told.rejection_reason}**",
+                icon="🛑",
+            )
+        verdict = _verdict_of(told)
+        if verdict.get("hypothesis"):
+            st.markdown(f"**What the agent concluded:** {verdict['hypothesis']}")
+
+        rejected = verdict.get("hypotheses_rejected") or []
+        if rejected:
+            st.markdown("**Tried and ruled out:**")
+            for entry in rejected:
+                st.markdown(
+                    f"- ~~{entry.get('hypothesis', '')}~~ — {entry.get('reason', '')}"
+                )
+        elif not told.investigated:
+            st.markdown("_Not investigated._")
+
+        st.info(f"**What would unblock this:** {unblock_hint(told)}", icon="🔑")
+
+
 def main() -> None:
     st.set_page_config(page_title="Closo", page_icon="🧾", layout="wide")
 
@@ -347,10 +704,14 @@ def main() -> None:
 
     if screen == "Ingest":
         screen_ingest()
+    elif screen == "Live run":
+        screen_live_run()
     elif screen == "Scorecard":
         screen_scorecard()
+    elif screen == "Exception drill-down":
+        screen_drilldown()
     else:
-        st.info(f"Placeholder. This screen lands in {PENDING_STAGE[screen]}.", icon="🚧")
+        screen_escalations()
 
 
 if __name__ == "__main__":

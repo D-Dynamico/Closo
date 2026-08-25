@@ -116,6 +116,78 @@ class RunStory:
         return [story for story in self.exceptions if story.investigated]
 
 
+#: What a human would have to go and do to unstick each kind of exception
+#: (10.5). Keyed by the reason Layer 1 gave, because that is the fact the
+#: run actually established - "no settlement carries this UTR" is a
+#: different errand from "the amount will not reconcile".
+UNBLOCK_HINTS: dict[str, str] = {
+    "no_counterpart": (
+        "the settlement is genuinely absent from the statement - raise it with "
+        "Razorpay support, quoting the settlement id and expected amount"
+    ),
+    "no_utr_match": (
+        "no settlement carries this UTR - confirm with the bank whether this "
+        "credit came from somewhere other than Razorpay"
+    ),
+    "no_utr_in_narration": (
+        "the narration carries no recoverable reference - ask the bank for the "
+        "full remittance details for this credit"
+    ),
+    "duplicate_utr": (
+        "two records share one reference - ask Razorpay which settlement the "
+        "UTR belongs to"
+    ),
+    "outside_tolerance": (
+        "the amount does not reconcile under either fee schedule - confirm "
+        "which schedule was applied to this payout"
+    ),
+    "amount_mismatch": (
+        "the amount does not reconcile under either fee schedule - confirm "
+        "which schedule was applied to this payout"
+    ),
+    "outside_date_window": (
+        "the amount matches but the credit landed outside the T+3 settlement "
+        "window - check with the bank whether the payout was delayed"
+    ),
+    "ambiguous_tie": (
+        "two candidates fit equally well and guessing is forbidden - a "
+        "stronger identifier is needed to tell them apart"
+    ),
+}
+
+FALLBACK_HINT = "needs a human to look at the source records"
+
+
+def unblock_hint(story: "ExceptionStory") -> str:
+    """What would unblock this exception, in one sentence.
+
+    A verifier rejection outranks the Layer 1 reason: the useful fact is no
+    longer "this did not match" but "something was proposed and did not
+    survive checking", which sends a human to a different place.
+    """
+    if story.rejection_reason:
+        return (
+            f"the agent proposed a match and the verifier rejected it "
+            f"({story.rejection_reason}) - a human should check the cited "
+            f"records before anything is accepted"
+        )
+    return UNBLOCK_HINTS.get(story.reason, FALLBACK_HINT)
+
+
+def escalations(story: RunStory) -> list["ExceptionStory"]:
+    """Everything still open, rejections first.
+
+    A verdict the verifier threw out is the most informative row on the
+    screen (10.5) and the one a human should read first, so it is not left
+    to sort alphabetically among the credits nobody could explain.
+    """
+    open_items = [
+        told for told in story.exceptions
+        if not told.skipped and told.verified is not True
+    ]
+    return sorted(open_items, key=lambda t: (t.rejection_reason is None, t.exception_id))
+
+
 def narrate(events: Iterable[dict]) -> RunStory:
     """Rebuild a run's story from its audit events.
 

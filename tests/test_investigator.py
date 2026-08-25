@@ -318,7 +318,11 @@ def test_resolved_without_an_arithmetic_block_is_rejected(toolbox, real_ids) -> 
         an_exception()
     )
     assert outcome.verdict.confidence == "unresolvable"
-    assert "incomplete" in outcome.verdict.hypothesis
+    assert "complete proposed match" in outcome.verdict.hypothesis
+    assert "verifier" not in outcome.verdict.hypothesis, (
+        "this module refused the verdict, not the verifier - and the "
+        "escalation queue shows both, so the wording has to say which"
+    )
 
 
 def test_resolved_without_payment_ids_is_rejected(toolbox, real_ids) -> None:

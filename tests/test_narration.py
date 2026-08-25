@@ -365,3 +365,97 @@ def test_a_real_run_marks_no_honest_escalation_as_a_rejection(real_story) -> Non
         if told.confidence == "unresolvable":
             assert told.verified is None
             assert told.rejection_reason is None
+
+
+# --------------------------------------------------------------------------
+# The escalation queue's view model (10.5)
+# --------------------------------------------------------------------------
+
+
+def a_story(*exceptions) -> "RunStory":
+    from closo.narration import RunStory
+
+    story = RunStory()
+    story.exceptions = list(exceptions)
+    return story
+
+
+def an_exception(exception_id: str, **kwargs) -> "ExceptionStory":
+    from closo.narration import ExceptionStory
+
+    return ExceptionStory(exception_id=exception_id, **kwargs)
+
+
+def test_a_verified_exception_is_not_in_the_queue() -> None:
+    from closo.narration import escalations
+
+    story = a_story(
+        an_exception("EX-001", verified=True, investigated=True),
+        an_exception("EX-002", reason="no_utr_match", investigated=True),
+    )
+    assert [t.exception_id for t in escalations(story)] == ["EX-002"]
+
+
+def test_a_skipped_exception_is_not_in_the_queue() -> None:
+    """The second leg of a split payout was resolved by the first leg's
+    verdict. Listing it as open would invent work that does not exist."""
+    from closo.narration import escalations
+
+    story = a_story(an_exception("EX-004", skipped=True, reason="duplicate_utr"))
+    assert escalations(story) == []
+
+
+def test_rejections_sort_ahead_of_everything_else() -> None:
+    """A verdict the verifier threw out is the row a human should read
+    first (10.5) - and by exception id it would otherwise sort in among
+    the credits nobody could explain, which is exactly where it would be
+    missed."""
+    from closo.narration import escalations
+
+    story = a_story(
+        an_exception("EX-001", reason="no_utr_match", investigated=True),
+        an_exception("EX-002", reason="no_counterpart", investigated=True),
+        an_exception("EX-009", reason="amount_mismatch", investigated=True,
+                     verified=False, rejection_reason="phantom_reference"),
+    )
+    assert [t.exception_id for t in escalations(story)] == [
+        "EX-009", "EX-001", "EX-002"
+    ]
+
+
+def test_the_queue_is_otherwise_in_run_order() -> None:
+    """Beyond rejections, the order the run met them is the order a human
+    reads them in - a shuffled queue is a queue nobody can check against
+    the Live-run screen."""
+    from closo.narration import escalations
+
+    story = a_story(
+        an_exception("EX-007", reason="no_utr_match", investigated=True),
+        an_exception("EX-003", reason="no_counterpart", investigated=True),
+    )
+    assert [t.exception_id for t in escalations(story)] == ["EX-003", "EX-007"]
+
+
+def test_every_layer_1_reason_has_an_unblock_hint() -> None:
+    """10.5 asks what would unblock each item. A reason with no hint falls
+    back to "needs a human to look at it", which is true of everything here
+    and therefore says nothing."""
+    from closo.narration import FALLBACK_HINT, unblock_hint
+    from closo.schemas import ExceptionReason
+
+    for reason in ExceptionReason.__args__:
+        told = an_exception("EX-001", reason=reason)
+        assert unblock_hint(told) != FALLBACK_HINT, f"{reason} has no hint"
+
+
+def test_a_rejection_outranks_the_layer_1_reason_in_the_hint() -> None:
+    """The useful fact is no longer "this did not match" but "something was
+    proposed and did not survive checking" - which sends a human to a
+    different place entirely."""
+    from closo.narration import unblock_hint
+
+    told = an_exception("EX-001", reason="no_counterpart",
+                        rejection_reason="phantom_reference")
+    hint = unblock_hint(told)
+    assert "phantom_reference" in hint
+    assert "Razorpay support" not in hint

@@ -352,6 +352,13 @@ class Investigator:
         than reaching the verifier. The verifier's job is checking arithmetic
         against records, not repairing malformed input, and a verdict that
         cannot be parsed has claimed nothing to check.
+
+        The wording matters on screen. Three different things can refuse a
+        verdict - this module, the verifier, and the pipeline's own
+        credit-level checks - and the escalation queue shows all three. A
+        message reading "verdict rejected" here was being read as the
+        verifier's work on a screen that had just said the verifier rejected
+        nothing.
         """
         args = call.args or {}
         rejected = [
@@ -368,7 +375,8 @@ class Investigator:
         if confidence not in ("resolved", "probable", "unresolvable"):
             return _unresolvable(
                 item.exception_id,
-                f"verdict rejected: unknown confidence {confidence!r}",
+                f"the agent's verdict could not be read: unknown confidence "
+                f"{confidence!r}",
                 rejected,
             )
         if confidence == "unresolvable":
@@ -381,8 +389,9 @@ class Investigator:
         if match is None:
             return _unresolvable(
                 item.exception_id,
-                f"verdict rejected: {confidence!r} but the proposed match was "
-                "incomplete",
+                f"the agent's verdict could not be used: it claimed "
+                f"{confidence!r} without a complete proposed match, so there "
+                "was nothing to verify",
                 rejected,
             )
         return Verdict(
