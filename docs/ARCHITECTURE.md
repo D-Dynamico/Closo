@@ -114,10 +114,12 @@ closo/
 ├── closo/
 │   ├── __init__.py
 │   ├── config.py              # env, constants, fee schedules
+│   ├── errors.py              # exception types shared across layer boundaries
 │   ├── schemas.py             # pydantic models for all records + verdicts
 │   ├── generator.py           # synthetic data generator (§5)
 │   ├── layer1_matcher.py      # deterministic cascade (§6)
 │   ├── llm_client.py          # provider seam: LLMClient protocol, GeminiClient, MockLLMClient
+│   ├── response_cache.py      # committed model responses + the offline replay client
 │   ├── layer2_investigator.py # LLM agent + tool definitions (§7)
 │   ├── layer3_verifier.py     # independent checker (§8)
 │   ├── tools.py               # tool implementations the LLM calls (query local SQLite/CSV, cached RZP API)
@@ -188,7 +190,7 @@ Rules baked into the system prompt: max 8 tool calls per exception; `unresolvabl
 ### 7.3 Cost/latency controls
 - `temperature=0`, cap tool loops at 8, hard timeout 30s per exception, then auto-`unresolvable`.
 - Record tokens used per exception in the audit log → surfaces as cost-per-record in the scorecard.
-- Cache every LLM response in SQLite keyed by exception content. Free-tier quota is finite; re-runs, tests and the demo must cost zero requests.
+- Cache every LLM response, keyed by the whole conversation rather than by the exception alone — the same question asked after different evidence is a different question. Free-tier quota is finite; re-runs, tests and the demo must cost zero requests. The cache is consulted *before* the budget guard, since replaying spends nothing and charging a request for it would misreport the day's quota.
 - Retry once on 429/503 with backoff, then `unresolvable`. Rate-limit exhaustion must degrade one exception, never kill the batch.
 - Process exceptions sequentially in demo mode (streaming UI narration), `ThreadPoolExecutor(4)` otherwise.
 
@@ -228,6 +230,10 @@ Pure functions, no LLM imports (enforced by test). For every `resolved`/`probabl
 
 PASS → status `AGENT_RESOLVED_VERIFIED`. FAIL → status `ESCALATED` with `verifier_rejection_reason`, and the failed verdict is preserved in the audit log (rejections are demo gold, not embarrassments). `probable` that passes verification still lands in a "needs human sign-off" sub-list on the escalation screen — verified math, unverified intent.
 
+**Sign-off is a flag, not a fourth state.** A `probable` verdict whose arithmetic the verifier reproduced is `AGENT_RESOLVED_VERIFIED` with `needs_human_signoff` set — the math genuinely was re-checked, and §2 admits no fourth state. The honesty is carried by reporting rather than by demotion: the scorecard counts those resolutions and their money separately (`awaiting_signoff`, `money_awaiting_signoff`) *inside* the resolved figures, and the escalation screen lists them as the sign-off sub-list, so "resolved" is never read as "settled, nothing left to do".
+
+**Two checks the verifier cannot make, and the pipeline therefore does.** It cannot know which exception was being asked about, nor what Layer 1 already matched. So `pipeline.run()` refuses a verified verdict that claims a credit some other resolution already owns, or that resolves a credit other than the one the exception concerned; and it seeds the verifier's consumed set with every payment Layer 1 spent. Both are ways a verdict passes every individual check and still double-counts money.
+
 ### 8.1 The fee-schedule anomaly, and why check 3 caps rather than fails
 
 Check 3 as originally written contradicted §5.2. Error class E4 **is** the case where a
@@ -263,7 +269,11 @@ applies to intent, never to arithmetic.
 - `runs(run_id, seed, started_at, finished_at, records_total, config_json)`
 - `events(event_id, run_id, ts, layer, record_ref, event_type, payload_json)` — every pass decision, every tool call, every verdict, every verifier check. Append-only. The UI's replay mode reads this table.
 - `resolutions(run_id, bank_txn_id, final_status, pass_or_verdict_json, verifier_result_json)`
-- `api_cache(cache_key, response_json, fetched_at)` — RZP responses.
+- `api_cache(cache_key, response_json, fetched_at)` — cached model (and RZP) responses,
+  keyed by a hash of the whole conversation. `data/generated/demo/api_cache.json` is the
+  committed, clonable form of the same table: `.gitignore` excludes `*.db`, and a cache a
+  fresh clone cannot read does not help the person cloning. `response_cache.copy_into()`
+  pours one into the other.
 
 ### 9.2 Scorecard (`metrics.py`) — the only module allowed to open `ground_truth.json`
 - **Match rate:** (auto + verified) / total bank credits

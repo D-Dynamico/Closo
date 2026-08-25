@@ -117,3 +117,85 @@ def test_section_index_covers_every_section() -> None:
         assert re.search(rf"\|\s*{number}\s*\|", index), (
             f"section {number} is not listed in the SYSTEM_DESIGN index"
         )
+
+
+# --------------------------------------------------------------------------
+# The section guard's blind spot
+# --------------------------------------------------------------------------
+#
+# `_resolvable_sections` accepts a number that resolves *either* as a
+# subsection heading or as a numbered list item. Two numbers currently
+# resolve as both, and in both cases the code means the heading:
+#
+#   8.1  -> "### 8.1 The fee-schedule anomaly"   vs  §8's check 1, Existence
+#   10.1 -> "### 10.1 Demo mode"                 vs  §10's screen 1, Ingest
+#
+# So renaming either heading leaves every citation still "resolving" - to
+# something else entirely, silently, which is the exact failure the guard
+# exists to prevent. Renumbering the docs to remove the overlap is not
+# free: `8.2` and `8.3` are cited *as* list items, so §8's checks have to
+# stay a numbered list. Pinning is the cheap half of the fix.
+
+#: Cited from `closo/` and resolving to a real subsection heading today.
+#: Pinned so a renamed heading fails here even when a same-numbered list
+#: item would otherwise cover for it. Adding a legitimate new citation to a
+#: heading means adding it to this set - that is the intended cost.
+HEADING_CITATIONS = frozenset({
+    "5.2", "7.2", "7.3", "7.4", "8.1", "9.1", "9.2", "10.1",
+    "12.1", "12.2", "12.5",
+})
+
+#: Numbers that are a heading *and* a list item. Pinned so a third one
+#: cannot appear unnoticed; both of these are read as the heading.
+KNOWN_AMBIGUOUS = frozenset({"8.1", "10.1"})
+
+
+def _heading_sections() -> set[str]:
+    return set(re.findall(r"(?m)^#{2,3} (\d+(?:\.\d+)?)", _spec_text()))
+
+
+def _list_item_sections() -> set[str]:
+    """Numbered list items, attributed to the ``## N.`` they sit under."""
+    current: str | None = None
+    items: set[str] = set()
+    for line in _spec_text().splitlines():
+        heading = re.match(r"^## (\d+)\.", line)
+        if heading:
+            current = heading.group(1)
+            continue
+        item = re.match(r"^(\d+)\. ", line)
+        if item and current:
+            items.add(f"{current}.{item.group(1)}")
+    return items
+
+
+def _cited_from_code() -> set[str]:
+    cited: set[str] = set()
+    for module in (REPO_ROOT / "closo").glob("*.py"):
+        text = module.read_text(encoding="utf-8")
+        cited |= set(re.findall(r"\((\d+\.\d+)\)", text))
+        cited |= set(re.findall(r"section (\d+\.\d+)", text))
+    return cited
+
+
+def test_a_cited_subsection_heading_cannot_be_renamed_away() -> None:
+    """Renaming `### 8.1` passes the resolution test above, because §8's
+    first check is also numbered 1. Every docstring citing 8.1 would then
+    point at "Existence" instead of the fee-schedule anomaly - resolving
+    perfectly and meaning something else. This is what catches that."""
+    still_headings = _cited_from_code() & _heading_sections()
+    assert still_headings == HEADING_CITATIONS, (
+        "the set of cited subsection headings changed. If a heading was "
+        "renumbered, put it back; if a new citation was added, add it here: "
+        f"{sorted(still_headings ^ HEADING_CITATIONS)}"
+    )
+
+
+def test_no_third_section_number_means_two_things() -> None:
+    """A number that is both a heading and a list item is a number a reader
+    cannot follow. Two exist and are documented above; a third should be a
+    deliberate decision rather than a surprise."""
+    ambiguous = _heading_sections() & _list_item_sections()
+    assert ambiguous == KNOWN_AMBIGUOUS, (
+        f"section number(s) resolving two ways: {sorted(ambiguous)}"
+    )

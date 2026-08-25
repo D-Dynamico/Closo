@@ -23,12 +23,15 @@ are unresolvable by construction, and a run that "solves" one has a bug.
 python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt   # Linux/macOS: .venv/bin/python
 
-./.venv/Scripts/python.exe -m pytest                            # 193 tests, fully offline
+./.venv/Scripts/python.exe -m pytest                            # 420 tests, fully offline
 ./.venv/Scripts/python.exe -m streamlit run app/streamlit_app.py
 ```
 
-No API key is needed. The frozen seed-42 dataset ships in `data/generated/demo/`, and
-`DEMO_MODE=1` (the default) makes no network calls at all — the demo runs in airplane mode.
+No API key is needed, and none is used. The frozen seed-42 dataset ships in
+`data/generated/demo/` alongside `api_cache.json` — the model's own responses from a
+recorded live run — so all three layers run with `DEMO_MODE=1` (the default) and no network
+call of any kind. The client the app builds has no API key and no SDK handle, which is what
+makes airplane mode a property rather than a promise.
 
 ## How it works
 
@@ -42,8 +45,13 @@ Every bank transaction ends in exactly one of three states — `AUTO_MATCHED`,
 `AGENT_RESOLVED_VERIFIED`, or `ESCALATED`. There is no fourth, and a verdict that fails
 verification is never shown as resolved.
 
-Current: Layer 1 auto-matches **83%** of credits with **zero false matches** against
-ground truth, escalating exactly the two designed-unresolvable classes.
+On seed 42, all three layers: **95.7%** of credits reconciled — 39 auto-matched by Layer 1
+and 6 resolved by the agent and verified — at **100% verified accuracy** against ground
+truth, with **zero false resolutions**. The two escalations left are the two designed
+unresolvable credits, which is the correct answer rather than a shortfall. Two of the agent
+resolutions carry proven math and unproven intent: the arithmetic reproduces the credit
+exactly, but under a fee schedule that was not the active one, so they are flagged for a
+human to approve instead of being quietly settled.
 
 ## Design choices worth knowing
 
@@ -56,6 +64,13 @@ ground truth, escalating exactly the two designed-unresolvable classes.
   treated as a claim and recomputed from raw records.
 - **Ground truth is quarantined.** The data loader has no parameter to request it; only the
   metrics module reads it, and only after a run completes.
+- **Escalation is a result, not a failure.** Two error classes are unresolvable by
+  construction, and the scorecard reports what is stuck as prominently as what is
+  reconciled — including the money.
+- **Every model response is cached and committed.** Requests, not tokens, are the scarce
+  resource on a free tier. A recorded run replays exactly, which also means the demo shows
+  a specific good run rather than hoping for one: temperature 0 does *not* make live
+  Layer 2 output reproducible.
 
 ## Docs
 

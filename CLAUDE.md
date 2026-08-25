@@ -63,6 +63,13 @@ python -m venv .venv && ./.venv/Scripts/python.exe -m pip install -r requirement
 
 # Regenerate the frozen demo dataset (must stay byte-identical — see Conventions)
 ./.venv/Scripts/python.exe -m closo.generator --seed 42 --out data/generated/demo
+
+# Replay the recorded run through the whole pipeline. No key, no network.
+PYTHONPATH=. ./.venv/Scripts/python.exe scripts/real_api_run.py --offline
+
+# Re-record it against the live API. Spends ~48 requests of a 500/day budget,
+# rewrites data/generated/demo/api_cache.json, and needs GEMINI_API_KEY in .env.
+PYTHONPATH=. ./.venv/Scripts/python.exe scripts/real_api_run.py
 ```
 
 `make test` / `make run` / `make generate` wrap the same commands. On Windows the venv
@@ -74,8 +81,10 @@ Three layers, each consuming only what the previous one could not resolve. **Lay
 (`layer1_matcher.py`, pandas + Decimal, no LLM) runs a deterministic cascade. **Layer 2**
 (`layer2_investigator.py`, Gemini) investigates the residue, one isolated conversation per
 exception. **Layer 3** (`layer3_verifier.py`, pure Python, no LLM) re-checks every verdict
-from raw records and can overrule the model. Every bank transaction ends in exactly one of
-three terminal states — `AUTO_MATCHED`, `AGENT_RESOLVED_VERIFIED`, `ESCALATED` — and there
+from raw records and can overrule the model. `pipeline.run()` drives all three and takes
+the investigator as an argument, so the orchestrator never imports the LLM seam - live for
+the script, cached for the demo, scripted for the tests. Every bank transaction ends in
+exactly one of three terminal states — `AUTO_MATCHED`, `AGENT_RESOLVED_VERIFIED`, `ESCALATED` — and there
 is no fourth.
 
 Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)**.
@@ -103,41 +112,56 @@ Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARC
   `gemini-3.5-flash-lite`; every full-Flash model is capped at 20 RPD and cannot finish a
   single run (ARCHITECTURE §7.4). Cache every response. The budget guard marks the remainder
   `unresolvable — quota exhausted` and stops cleanly rather than dying mid-batch.
+- **The demo replays a recorded run, and the cache key is the whole conversation.** Change
+  the system prompt, the opening brief, the exception order or a tool's output and every key
+  misses — which degrades quietly into a queue of `unresolvable` verdicts rather than
+  failing. A test asserts zero cache misses; when it goes red, re-record the run.
 - **Determinism is load-bearing.** Same seed → byte-identical files. The generator uses one
   seeded `random.Random` and a fixed build order; reordering the class builders changes every
   generated value. `.gitattributes` pins LF, without which a fresh clone fails the
   determinism test on Windows.
 - **Escalation is success, not failure.** Error classes E9 and E10 are *designed* to be
   unresolvable. A run that "resolves" one has a critical bug, not a good day.
-- **Every module ≤ ~300 lines.** Three now exceed it — `generator.py` (364), `tools.py`
-  (364), `layer3_verifier.py` (362), `layer2_investigator.py` (419). Flagged rather than
-  hidden; worth a split pass.
+- **Every module ≤ ~300 lines**, counting code rather than docstrings — earlier notes mixed
+  the two and overstated the problem. Three exceed it: `generator.py` (392),
+  `layer2_investigator.py` (340) and `pipeline.py` (311). Flagged rather than hidden; worth
+  a split pass.
 - **Mutation-test anything that guards something.** Four stages running, mutating the code
   has exposed a test that could not fail — including, in Stage 5, the two tests protecting
   the project's central claim. Docs count too: renumbering a section slipped past its guard.
 
 ## Status
 
-Stages 0–6 complete. 347 tests passing, offline. **There is a demoable product from here
-on** — `streamlit run app/streamlit_app.py`, press Run reconciliation, see the Scorecard;
-Replay rebuilds it from the audit log with no network at all.
+Stages 0–7 complete. 420 tests passing, offline, with no API key. **The whole loop is
+demoable** — `streamlit run app/streamlit_app.py`, press Run reconciliation: all three
+layers run, Layer 2 replaying recorded model responses from
+`data/generated/demo/api_cache.json`. Replay rebuilds the run from the audit log. Neither
+path can reach a network; the client the app builds holds no key and no SDK handle.
 
-Seed 42: 47 credits, 83.0% match rate, 100% verified accuracy, ₹3.82M reconciled /
-₹294K stuck, 2 correct escalations and 6 false ones (all awaiting Layer 2).
+Seed 42, full pipeline: 47 credits, **95.7% match rate** (39 auto + 6 agent-verified),
+**100% verified accuracy**, ₹4.04M reconciled / ₹72K stuck, **zero false resolutions**,
+2 correct escalations and **zero false ones**. Two of the agent resolutions are E4 and
+carry `needs_human_signoff` — proven math, unproven intent.
 
-The Stage 6 real-API run is done (2026-08-25, `docs/real_api_run_2026-08-25.json`): E4, E5
-and E6 each resolved and verified against live model output, E9/E10 all escalated, zero
-false resolutions. Re-run it with `PYTHONPATH=. python scripts/real_api_run.py` — ~57
-requests. Note that **temperature 0 does not make live Layer 2 output reproducible**; which
-exceptions get solved varies run to run, which is what Stage 7's response cache addresses.
+Those numbers come from a real run on `gemini-3.5-flash-lite`
+(`docs/real_api_run_2026-08-25-stage7.json`, 48 requests, 190s), cached and replayed. Two
+things follow. **Temperature 0 does not make live Layer 2 output reproducible** — three
+live runs have now solved three different subsets — so the demo replays a specific good run
+rather than hoping for one. And **the cache key is the whole conversation**: change the
+prompt, the brief, the exception order or a tool result and every key misses, which
+degrades quietly rather than failing. A test asserts zero cache misses.
 
-Next: **Stage 7** — wire Layers 2 and 3 into `pipeline.run()`, add cost metrics, and cache
-the real-API responses into `api_cache` so the demo replays offline.
+Next: **Stage 8** — the full UI. Live-run streaming with `st.status` and the delayed
+verifier stamp, the drill-down (show an E4: hypothesis → evidence → arithmetic → independent
+verification → the sign-off question), and the escalation queue with rejected hypotheses
+struck through. Everything it needs is already on `RunOutcome` — `verdicts`,
+`verifications`, `needs_signoff`, `agent_matches` — and in the `events` table.
 
 The **E4 spec conflict is resolved** — ARCHITECTURE §8.1. A verdict citing an inactive fee
 schedule has its math checked in full and is capped at `probable` with the anomaly named,
 rather than failed outright. Still open: E5/E6 both surface as `duplicate_utr`,
-distinguishable only by the detail string.
+distinguishable only by the detail string — though the live model told them apart correctly,
+resolving E5 in a single verdict citing both legs.
 
 ## Docs
 

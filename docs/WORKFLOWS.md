@@ -70,7 +70,11 @@ Optional (only if everything else is done): settlement Q&A input at the bottom o
 
 ### 10.1 Demo mode (non-negotiable)
 `DEMO_MODE=1` in `.env`:
-- No network calls at all; RZP client serves from `api_cache` / local CSVs.
+- No network calls at all; Layer 2 serves from the committed response cache
+  (`data/generated/demo/api_cache.json`) through a client that holds no API key and no SDK
+  handle, and the RZP client serves from `api_cache` / local CSVs. With an empty cache the
+  run is Layer 1 only and says so, rather than reporting an investigation that never
+  happened.
 - Fixed seed 42; every number identical run-to-run (assert in e2e test).
 - A completed run can be **replayed** from the `events` table with realistic pacing — if wifi or the LLM API dies on stage, replay of the last good run is indistinguishable from live. Wire a small "Replay last run" button on Ingest.
 
@@ -112,9 +116,10 @@ Exit: §12.3 + §12.4 fully green, including off-by-a-paisa and internally-consi
 Steps: system prompt, tool-use loop with budget/timeout, `submit_verdict` forcing, retry-once on malformed output, mocked-client test suite; then one manual real-API run on the demo set.
 Exit: §12.5 green (mocked); real-API manual run resolves E3/E4/E5/E6/E8 and escalates E9/E10; §12.6 green with mock.
 
-**Stage 7 — Full pipeline hardening (2h).**
+**Stage 7 — Full pipeline hardening (2h). DONE 2026-08-25.**
 Steps: wire Layer 2+3 into `pipeline.run()`, ground-truth quarantine, scorecard cross-checks, cost metrics, cache the real-API run's responses into `api_cache` for offline replay.
 Exit: entire §12.6 green; airplane-mode run of the full pipeline succeeds.
+*Met: §12.6 green, and the airplane-mode run is itself a test rather than a procedure. On seed 42 the full pipeline reaches 95.7% at 100% verified accuracy with zero false resolutions, escalating exactly E9 and E10.*
 
 **Stage 8 — Full UI (3h).**
 Steps: Live-run streaming with `st.status` + delayed verifier stamp, drill-down, escalation queue with rejected-hypotheses strikethrough, Replay-last-run button, global color code.

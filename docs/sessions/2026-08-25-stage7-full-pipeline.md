@@ -292,3 +292,37 @@ sitting in the *Agent + verified* column of the taxonomy, and *"Cost · 0 API re
   new test reads the plotly spec and asserts all three colours are present *and that every
   tier carries a non-zero count* — before this stage amber was legend-only, and §12.7 asks
   for three colours on screen rather than three entries in a legend.
+
+---
+
+## Substep 6 — docs, and a hole in the section guard — 2026-08-25
+
+**Done:** `CLAUDE.md` (status, commands, the cache convention, corrected module sizes),
+`README.md`, `docs/ARCHITECTURE.md` (module map, `api_cache`, §8 sign-off and the two
+pipeline-level checks, §7.3 cache-before-budget), `docs/WORKFLOWS.md` (§10.1 demo mode,
+Stage 7 marked done with what it met). 2 new tests; full suite **422 passing**.
+
+**Surprises:**
+
+- **Mutating the docs found the section-reference guard had a blind spot** — the same habit
+  that caught the toothless version of this test two sessions ago. Renaming
+  `### 8.1 The fee-schedule anomaly` to `### 8.4` passed cleanly, because §8's *checks* are
+  a numbered list and item 1 also resolves as "8.1". Every docstring citing 8.1 would have
+  gone on resolving — to **"Existence"**, a different check entirely. Silent, and exactly
+  what the guard exists to prevent. `### 10.1 Demo mode` has the same shadow (§10's screen 1
+  is Ingest), and code cites 10.1 four times meaning the heading.
+
+  Removing the overlap by renumbering is not free: `8.2` and `8.3` are cited *as list
+  items*, so §8's checks must stay a numbered list. So the fix is a pin — the set of cited
+  numbers that resolve to a real heading is asserted explicitly, and a second test pins the
+  two known ambiguous numbers so a third cannot appear unnoticed. All three renumberings
+  (8.1, 10.1, 7.4) are now caught. **Left open:** the underlying ambiguity is documentation
+  debt, and a deliberate renumbering pass is the real repair.
+
+- **A `git checkout --` in a mutation loop reverted uncommitted work.** Restoring the three
+  mutated docs, the loop reverted `docs/WORKFLOWS.md` — whose Stage 7 edits were written but
+  not yet staged — and nothing failed, because the reverted content was documentation. Found
+  by reading `git status` rather than by any test. The lesson is narrow and worth keeping:
+  **mutation testing must restore from a copy taken before the mutation, never from git,
+  while the working tree has uncommitted work in it.** The two ARCHITECTURE mutations in the
+  same loop were fine only because a `cp` from a backup ran after the checkout.
