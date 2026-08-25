@@ -44,6 +44,38 @@ COLOR_AUTO = "#C0DD97"       # green  — Layer 1, deterministic
 COLOR_VERIFIED = "#FAC775"   # amber  — Layer 2 proposal that passed Layer 3
 COLOR_ESCALATED = "#F09595"  # red    — unresolved, honestly reported
 
+#: The colour code is global and fixed (10). One mapping, used by every
+#: screen, so a glance at any of them means the same thing - and so the
+#: chart and the text cannot drift apart, which is exactly what would
+#: happen with the hex written out twice.
+#:
+#: Each entry is (chart hex, Streamlit colour name). Streamlit's inline
+#: colour markup takes a name rather than a hex, so the two live together
+#: rather than in two places that agree by luck.
+STATE_COLORS: dict[str, tuple[str, str]] = {
+    "auto": (COLOR_AUTO, "green"),
+    "verified": (COLOR_VERIFIED, "orange"),
+    "escalated": (COLOR_ESCALATED, "red"),
+}
+
+
+def tint(state: str, text: str) -> str:
+    """Colour a label by terminal state, keeping the words.
+
+    Never colour alone: the state is always spelled out as well. A
+    projector that eats amber, or a reader who cannot separate red from
+    green, must still get the whole story - and on this screen the story
+    is the point.
+    """
+    return f":{STATE_COLORS[state][1]}[{text}]"
+
+
+def state_of(told: ExceptionStory) -> str:
+    """Which of the three terminal states an exception ended in."""
+    if told.skipped or told.verified:
+        return "verified"
+    return "escalated"
+
 SCREENS = ["Ingest", "Live run", "Scorecard", "Exception drill-down", "Escalation queue"]
 
 # Pacing for the Live-run screen. The verifier's line is deliberately the
@@ -310,9 +342,9 @@ def _tier_bar(card: Scorecard) -> go.Figure:
     """Horizontal stacked bar: how the batch split across terminal states."""
     figure = go.Figure()
     tiers = [
-        ("Auto-matched", card.auto_matched, COLOR_AUTO),
-        ("Agent + verified", card.agent_verified, COLOR_VERIFIED),
-        ("Escalated", card.escalated, COLOR_ESCALATED),
+        ("Auto-matched", card.auto_matched, STATE_COLORS["auto"][0]),
+        ("Agent + verified", card.agent_verified, STATE_COLORS["verified"][0]),
+        ("Escalated", card.escalated, STATE_COLORS["escalated"][0]),
     ]
     for label, value, color in tiers:
         figure.add_bar(
@@ -443,7 +475,7 @@ def _render_exception(told: ExceptionStory, animate: bool) -> None:
             if animate:
                 time.sleep(VERIFIER_DELAY if step.kind == "verification" else STEP_DELAY)
             _render_step(step)
-        st.markdown(f"**{told.outcome_label}**")
+        st.markdown(f"**{tint(state_of(told), told.outcome_label)}**")
 
 
 def _render_step(step: Step) -> None:
@@ -622,7 +654,7 @@ def _render_checklist(told: ExceptionStory) -> None:
             "know, so this is capped at **probable** and handed to a human.",
             icon="✍️",
         )
-    st.markdown(f"**{told.outcome_label}**")
+    st.markdown(f"**{tint(state_of(told), told.outcome_label)}**")
 
 
 # --------------------------------------------------------------------------
@@ -649,7 +681,7 @@ def screen_escalations() -> None:
 
     rejected = [t for t in open_items if t.rejection_reason]
     st.markdown(
-        f"**{len(open_items)}** open — "
+        f"**{tint('escalated', f'{len(open_items)} open')}** — "
         f"{len(rejected)} proposed and rejected by the verifier, "
         f"{len(open_items) - len(rejected)} nobody could explain."
     )

@@ -518,3 +518,122 @@ def test_a_block_header_says_the_outcome_in_words(app) -> None:
     assert sum(h.endswith("— escalated") for h in headers) == 4
     assert sum("already covered" in h for h in headers) == 1
     assert not any("✓" in h or "✗" in h for h in headers)
+
+
+# --------------------------------------------------------------------------
+# The colour code (10) — global and fixed
+# --------------------------------------------------------------------------
+
+
+def test_there_are_exactly_three_colours_and_they_are_the_specified_ones() -> None:
+    """10 fixes the palette. A fourth colour, or a shifted hex, breaks the
+    one rule that lets a glance at any screen mean the same thing."""
+    from app.streamlit_app import STATE_COLORS
+
+    assert {hex_code for hex_code, _ in STATE_COLORS.values()} == {
+        "#C0DD97", "#FAC775", "#F09595"
+    }
+    assert len(STATE_COLORS) == 3
+
+
+def test_the_chart_and_the_text_read_from_one_mapping() -> None:
+    """Written out twice, the Plotly bar and the inline labels would agree
+    by luck and drift the first time one of them changed."""
+    import inspect
+
+    from app import streamlit_app
+
+    source = inspect.getsource(streamlit_app._tier_bar)
+    assert "STATE_COLORS" in source
+    assert "#C0DD97" not in source
+
+
+def test_no_state_is_communicated_by_colour_alone(app) -> None:
+    """A projector that eats amber, or a reader who cannot separate red
+    from green, must still get the whole story - and here the story is the
+    point. Every tinted label carries its words inside the tint."""
+    at = after_a_run(app)
+    at.sidebar.radio[0].set_value("Live run").run()
+
+    import re
+
+    tinted = [m.value for m in at.markdown if m.value.startswith("**:")]
+    assert len(tinted) == 10, "one outcome line per exception"
+    for label in tinted:
+        inside = re.fullmatch(r"\*\*:(green|orange|red)\[(.+)\]\*\*", label)
+        assert inside, label
+        words = inside.group(2).split()
+        assert len(words) >= 2, (
+            f"the tint has to wrap a readable outcome, not a bare mark: {label}"
+        )
+
+
+def test_the_three_states_are_tinted_consistently() -> None:
+    """The same state must reach for the same colour on every screen,
+    which is only checkable because one function decides it."""
+    from app.streamlit_app import tint
+
+    assert tint("auto", "x") == ":green[x]"
+    assert tint("verified", "x") == ":orange[x]"
+    assert tint("escalated", "x") == ":red[x]"
+
+
+def test_a_skipped_exception_is_tinted_as_resolved_not_as_open() -> None:
+    """Its credit really was resolved - by the other leg's verdict. Red
+    would report work that is not outstanding."""
+    from closo.narration import ExceptionStory
+
+    from app.streamlit_app import state_of
+
+    assert state_of(ExceptionStory("EX-004", skipped=True)) == "verified"
+    assert state_of(ExceptionStory("EX-007")) == "escalated"
+
+
+# --------------------------------------------------------------------------
+# The 12.7 checklist, in one place
+# --------------------------------------------------------------------------
+
+
+def test_the_whole_demo_runs_in_airplane_mode(app, tmp_path) -> None:
+    """12.7 end to end, as one pass through the product: boot, run, every
+    screen, then replay - with no key and no network anywhere in it.
+
+    The individual behaviours have their own tests above; this one exists
+    because the checklist is a *sequence*, and Stage 4 and Stage 7 both
+    found bugs that appeared only after a particular click had happened
+    earlier in one.
+    """
+    at = app.run()
+    assert not list(at.exception)
+
+    at.button[0].click().run()                      # run all three layers
+    assert not list(at.exception), list(at.exception)
+
+    from app.streamlit_app import SCREENS
+
+    for screen in SCREENS:
+        at.sidebar.radio[0].set_value(screen).run()
+        assert not list(at.exception), (screen, list(at.exception))
+
+    at.sidebar.radio[0].set_value("Scorecard").run()
+    cost = next(c.value for c in at.caption if c.value.startswith("Cost "))
+    assert cost.startswith("Cost · 0 API request(s)"), cost
+    live = {m.label: m.value for m in at.metric}
+
+    at.sidebar.radio[0].set_value("Ingest").run()
+    at.button[1].click().run()                      # replay from the log
+    assert not list(at.exception), list(at.exception)
+
+    at.sidebar.radio[0].set_value("Scorecard").run()
+    assert {m.label: m.value for m in at.metric} == live
+
+    # The replayed run still carries its investigation, which is the half
+    # that used to disappear: 10 blocks and a full drill-down.
+    at.sidebar.radio[0].set_value("Live run").run()
+    assert len(at.get("status")) == 10
+
+    at.sidebar.radio[0].set_value("Exception drill-down").run()
+    assert any(w.value for w in at.warning if "was active on" in w.value)
+
+    at.sidebar.radio[0].set_value("Escalation queue").run()
+    assert len(at.expander) == 4
