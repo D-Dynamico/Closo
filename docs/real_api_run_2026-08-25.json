@@ -1,0 +1,145 @@
+{
+  "elapsed_seconds": 225.9,
+  "model": "gemini-3.5-flash-lite",
+  "requests_spent": 57,
+  "results": [
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E6",
+      "exception_id": "EX-001",
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "layer1_reason": "duplicate_utr",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 16995,
+      "tool_calls_used": 5,
+      "verified": false
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0353"
+      ],
+      "error_class": "E6",
+      "exception_id": "EX-002",
+      "hypothesis": "This is a duplicated UTR reference case where two distinct settlements (setl_0350 and setl_0352) on different dates share the same bank UTR, and bank transaction bt_0353 corresponds exactly to settlement setl_0352 (payment pay_0349).",
+      "layer1_reason": "duplicate_utr",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 17869,
+      "tool_calls_used": 7,
+      "verified": true
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E5",
+      "exception_id": "EX-003",
+      "hypothesis": "The UTR is duplicated across two unrelated bank transactions (bt_0344 and bt_0345) whose amounts do not correspond cleanly to individual payment splits or valid partial settlements, making the credit unresolvable without further banking context.",
+      "layer1_reason": "duplicate_utr",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 17132,
+      "tool_calls_used": 5,
+      "verified": false
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0345",
+        "bt_0344"
+      ],
+      "error_class": "E5",
+      "exception_id": "EX-004",
+      "hypothesis": "The settlement setl_0343 has a net amount of 105,299.92 which does not match bt_0345 (63,179.95) or bt_0344 (42,119.97) individually, and sharing UTR UTIB735158506431 across multiple bank credits represents a duplicate reference issue rather than a clean split payout.",
+      "layer1_reason": "duplicate_utr",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 18818,
+      "tool_calls_used": 7,
+      "verified": true
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E4",
+      "exception_id": "EX-005",
+      "hypothesis": "The bank credit amount 19064.96 does not match the settlement net 19029.31 under any fee schedule or known adjustment, making the credit unresolvable.",
+      "layer1_reason": "outside_tolerance",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 13729,
+      "tool_calls_used": 3,
+      "verified": false
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0336"
+      ],
+      "error_class": "E4",
+      "exception_id": "EX-006",
+      "hypothesis": "Settlement setl_0335 was computed and paid out using fee schedule v1 (amounting to 71846.83), despite the settlement record indicating v2 as active/recorded.",
+      "layer1_reason": "outside_tolerance",
+      "rejection_reason": null,
+      "schedule_anomaly": "cited v1 but v2 was active on 2026-03-25",
+      "tokens_used": 14972,
+      "tool_calls_used": 8,
+      "verified": true
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E10",
+      "exception_id": "EX-007",
+      "hypothesis": "The unmatched bank credit bt_0392 is a vendor refund unrelated to any known customer payment or settlement in our system.",
+      "layer1_reason": "no_utr_match",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 39364,
+      "tool_calls_used": 8,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E10",
+      "exception_id": "EX-008",
+      "hypothesis": "The unmatched bank credit is explicitly labeled as a VENDOR REFUND and corresponds to no internal settlement or payment record.",
+      "layer1_reason": "no_utr_match",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 14095,
+      "tool_calls_used": 7,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E9",
+      "exception_id": "EX-009",
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "layer1_reason": "no_counterpart",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 16318,
+      "tool_calls_used": 8,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "error_class": "E9",
+      "exception_id": "EX-010",
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "layer1_reason": "no_counterpart",
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 11688,
+      "tool_calls_used": 6,
+      "verified": false
+    }
+  ],
+  "total_tokens": 180980
+}
