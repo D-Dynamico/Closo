@@ -95,15 +95,19 @@ def test_run_enables_replay(app) -> None:
 
 
 def test_scorecard_shows_headline_numbers(app) -> None:
+    """Pressing Run drives all three layers, with Layer 2 replaying the
+    committed responses. 95.7% is the recorded live run's figure, so this
+    also catches the cache drifting out of step with the pipeline."""
     at = app.run()
     at.button[0].click().run()
     at.sidebar.radio[0].set_value("Scorecard").run()
 
     values = {m.label: m.value for m in at.metric}
-    assert values["Match rate"] == "83.0%"
+    assert values["Match rate"] == "95.7%"
     assert values["Verified accuracy"] == "100.0%"
     assert values["₹ reconciled"].startswith("₹")
     assert values["Correctly escalated"] == "2"
+    assert values["Falsely escalated"] == "0"
 
 
 def test_scorecard_renders_the_tier_bar_and_taxonomy(app) -> None:
@@ -114,12 +118,57 @@ def test_scorecard_renders_the_tier_bar_and_taxonomy(app) -> None:
     assert len(at.dataframe) == 1
 
 
-def test_scorecard_declares_the_pending_layer(app) -> None:
-    """The false-escalation count is shown in full; this only explains it."""
+def test_scorecard_declares_the_sign_off_sub_list(app) -> None:
+    """The E4 cases resolve on proven math and unproven intent (8.1). The
+    screen has to say so: counted as resolved, flagged for a human."""
     at = app.run()
     at.button[0].click().run()
     at.sidebar.radio[0].set_value("Scorecard").run()
-    assert any("Layer 2" in w.value for w in at.warning)
+    assert any("unverified intent" in i.value for i in at.info)
+
+
+def test_scorecard_shows_what_the_run_cost(app) -> None:
+    """9.2's cost line. Requests before tokens, because requests are what
+    is scarce - and a replayed run showing zero requests is stating a fact
+    about itself, not leaving a field empty."""
+    at = app.run()
+    at.button[0].click().run()
+    at.sidebar.radio[0].set_value("Scorecard").run()
+    cost = [c.value for c in at.caption if c.value.startswith("Cost ")]
+    assert cost, [c.value for c in at.caption]
+    assert "API request(s)" in cost[0] and "cache hit(s)" in cost[0]
+    assert "tokens" in cost[0] and "free tier" in cost[0]
+
+
+def test_the_run_makes_no_api_requests(app) -> None:
+    """The airplane-mode guarantee at the button, not just in the library.
+    A cached Layer 2 that quietly reached for the network would produce an
+    identical screen - the request count is the only thing that shows it."""
+    at = app.run()
+    at.button[0].click().run()
+    at.sidebar.radio[0].set_value("Scorecard").run()
+    cost = next(c.value for c in at.caption if c.value.startswith("Cost "))
+    assert cost.startswith("Cost · 0 API request(s)")
+
+
+def test_all_three_terminal_states_appear_on_the_tier_bar(app) -> None:
+    """12.7 asks for all three colours on screen. Amber only exists once
+    Layer 2 resolves something a verifier passed, so this is the check
+    that the middle tier is real rather than a legend entry."""
+    at = app.run()
+    at.button[0].click().run()
+    at.sidebar.radio[0].set_value("Scorecard").run()
+
+    import json
+
+    spec = json.loads(at.get("plotly_chart")[0].proto.spec)
+    tiers = {bar["name"]: (bar["marker"]["color"], bar["x"][0]) for bar in spec["data"]}
+    assert {color for color, _ in tiers.values()} == {
+        "#C0DD97", "#FAC775", "#F09595"
+    }
+    assert all(count > 0 for _, count in tiers.values()), (
+        f"every tier must carry records, or a colour is decoration: {tiers}"
+    )
 
 
 def test_no_critical_banner_on_a_clean_run(app) -> None:
@@ -156,6 +205,17 @@ def test_replay_reproduces_the_live_scorecard(app) -> None:
 
     at.sidebar.radio[0].set_value("Scorecard").run()
     assert {m.label: m.value for m in at.metric} == live
+
+
+def test_replay_reports_all_three_states(app) -> None:
+    """A replay that named only the matched and escalated counts would
+    silently drop Layer 2's six resolutions from the one sentence a
+    presenter reads aloud - and Layer 2 is the point."""
+    at = app.run()
+    at.button[0].click().run()
+    at.button[1].click().run()
+    message = at.success[0].value
+    assert "auto-matched" in message and "agent-resolved and verified" in message
 
 
 def test_replay_is_labelled_as_a_replay(app) -> None:

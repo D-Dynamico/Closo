@@ -21,8 +21,11 @@ import streamlit as st
 from closo.audit import AuditLog
 from closo.config import DB_PATH, DEMO_DIR, DEMO_MODE, DEMO_SEED
 from closo.dataset_io import load_batch
+from closo.layer2_investigator import Investigator
 from closo.metrics import Scorecard, score_demo
 from closo.pipeline import RunOutcome, replay, run_demo
+from closo.response_cache import DEMO_CACHE_PATH, JSONResponseStore, CachedLLMClient
+from closo.tools import ToolBox
 
 COLOR_AUTO = "#C0DD97"       # green  — Layer 1, deterministic
 COLOR_VERIFIED = "#FAC775"   # amber  — Layer 2 proposal that passed Layer 3
@@ -40,6 +43,28 @@ PENDING_STAGE = {
 def get_audit_log() -> AuditLog:
     """One audit log per server process."""
     return AuditLog(DB_PATH)
+
+
+@st.cache_resource
+def get_response_cache() -> JSONResponseStore:
+    """The recorded model responses the demo replays from."""
+    return JSONResponseStore(DEMO_CACHE_PATH)
+
+
+def build_investigator(batch) -> Investigator | None:
+    """Layer 2, backed by cached responses. None when nothing is cached.
+
+    The client holds no API key and no SDK handle, so pressing Run here
+    cannot reach a network however the room's wifi is behaving. With an
+    empty cache this returns None and the run is Layer 1 only, reported as
+    such - which is honest, where an investigator that could only miss
+    would produce a queue of `unresolvable` verdicts that say nothing
+    about the data.
+    """
+    store = get_response_cache()
+    if not len(store):
+        return None
+    return Investigator(ToolBox(batch), CachedLLMClient(store))
 
 
 @st.cache_data
@@ -106,9 +131,15 @@ def screen_ingest() -> None:
             st.caption(f"Last run: `{previous}`")
 
     if DEMO_MODE:
+        cached = len(get_response_cache())
+        layer2 = (
+            f"Layers 2 and 3 replay {cached} recorded model responses"
+            if cached else
+            "No recorded responses cached, so this run is Layer 1 only"
+        )
         st.info(
-            f"Demo mode: seed {DEMO_SEED}, no network calls. Every number is "
-            "reproducible run to run.",
+            f"Demo mode: seed {DEMO_SEED}, no network calls. {layer2}. Every "
+            "number is reproducible run to run.",
             icon="🔒",
         )
 
@@ -117,8 +148,8 @@ def _execute_run() -> None:
     """Run the pipeline and stash the result for the Scorecard screen."""
     log = get_audit_log()
     with st.spinner("Reconciling…"):
-        outcome = run_demo(audit=log)
         batch = load_batch(DEMO_DIR)
+        outcome = run_demo(audit=log, investigator=build_investigator(batch))
         card = score_demo(outcome, batch)
 
     st.session_state["outcome"] = outcome
@@ -128,9 +159,9 @@ def _execute_run() -> None:
 
     st.success(
         f"Reconciled {card.total_bank_txns} bank credits in "
-        f"{outcome.elapsed_seconds * 1000:.0f} ms — "
-        f"{card.auto_matched} matched, {card.escalated} escalated. "
-        "See the Scorecard.",
+        f"{outcome.elapsed_seconds * 1000:.0f} ms — {card.auto_matched} auto-matched, "
+        f"{card.agent_verified} agent-resolved and verified, "
+        f"{card.escalated} escalated. See the Scorecard.",
         icon="✅",
     )
 
@@ -153,7 +184,8 @@ def _execute_replay(run_id: str) -> None:
 
     st.success(
         f"Replayed `{run_id}` from the audit log — {card.total_bank_txns} credits, "
-        f"{card.auto_matched} matched, {card.escalated} escalated.",
+        f"{card.auto_matched} auto-matched, {card.agent_verified} agent-resolved "
+        f"and verified, {card.escalated} escalated.",
         icon="⏮️",
     )
 
@@ -203,20 +235,57 @@ def screen_scorecard() -> None:
     if card.pending_investigation:
         st.warning(
             f"{card.pending_investigation} of those {card.false_escalations} are "
-            "waiting on the Layer 2 investigator, which is not built yet. They are "
+            "waiting on the Layer 2 investigator, which did not run. They are "
             "still counted as false escalations — the work is undone either way.",
             icon="🚧",
+        )
+
+    if card.awaiting_signoff:
+        st.info(
+            f"{card.awaiting_signoff} of the {card.agent_verified} agent resolutions "
+            f"carry {rupees(card.money_awaiting_signoff)} of **verified math and "
+            "unverified intent** — the arithmetic reproduces the credit exactly, but "
+            "the fee schedule that produced it was not the one active on the date. "
+            "Counted as resolved, and flagged for a human to approve.",
+            icon="✍️",
         )
 
     st.subheader("Exception taxonomy")
     st.dataframe(_taxonomy_frame(card), width="stretch", hide_index=True)
 
+    _cost_line(card, outcome)
+
+
+def _cost_line(card: Scorecard, outcome: RunOutcome) -> None:
+    """Throughput and cost (9.2).
+
+    Requests are shown before tokens because requests are the scarce
+    resource on this quota, and shown even when zero: a run replaying
+    cached responses spent nothing, and that is a fact about the run worth
+    stating rather than an empty field.
+    """
     st.caption(
         f"Run `{card.run_id}` · seed {card.seed} · "
         f"{card.total_bank_txns} credits in {outcome.elapsed_seconds * 1000:.0f} ms "
-        f"({card.records_per_minute:,.0f} records/min) · "
+        f"({card.records_per_minute:,.0f} records/min overall, "
+        f"{card.layer1_records_per_minute:,.0f} for Layer 1 alone) · "
         f"₹ reconciled + ₹ stuck = {rupees(card.money_reconciled + card.money_stuck)}"
     )
+    st.caption(
+        f"Cost · {card.requests_made} API request(s) and {card.cache_hits} cache hit(s) "
+        f"for {card.exceptions_investigated} investigation(s), "
+        f"{card.exceptions_skipped} skipped as already covered · "
+        f"{card.tokens_used:,} tokens ({card.tokens_per_record:,.0f}/record) · "
+        f"{rupees(card.rupees_spent)} total, {rupees(card.rupees_per_record)}/record "
+        + ("(free tier)" if card.rupees_spent == 0 else "")
+    )
+    if card.quota_exhausted:
+        st.warning(
+            "The daily request quota ran out partway through this run. The "
+            "remaining exceptions are marked unresolvable for that reason and "
+            "not because anything was concluded about them.",
+            icon="⏳",
+        )
 
 
 def _tier_bar(card: Scorecard) -> go.Figure:

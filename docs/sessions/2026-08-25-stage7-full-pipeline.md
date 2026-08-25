@@ -250,3 +250,45 @@ reporting the original run's tokens again would be a claim about a request never
   exactly why the cache exists: the demo now replays a specific good run rather than hoping
   for one. Worth saying plainly in the pitch rather than claiming determinism through
   Layer 2.
+
+---
+
+## Substep 5 — the Scorecard shows all three layers — 2026-08-25
+
+**Done:** pressing **Run reconciliation** now runs all three layers, with Layer 2 replaying
+the committed responses. The Scorecard gained the sign-off explanation and a cost line; the
+tier bar finally has an amber segment. 5 new UI tests; full suite **420 passing**.
+
+Driven in a real browser as well as through `AppTest`: *"Reconciled 47 bank credits in
+171 ms — 39 auto-matched, 6 agent-resolved and verified, 2 escalated"*, then a Scorecard
+reading 95.7% / 100% / ₹4,043,573.07 / ₹72,031.50, all three colours on the bar, E4/E5/E6
+sitting in the *Agent + verified* column of the taxonomy, and *"Cost · 0 API request(s) and
+48 cache hit(s) for 9 investigation(s), 1 skipped as already covered · 0 tokens (0/record) ·
+₹0.00 total, ₹0.00/record (free tier)"*.
+
+**Decisions:**
+
+- **The app builds a `CachedLLMClient`, never a `GeminiClient`.** The button cannot reach a
+  network whatever the room's wifi is doing, because the object behind it has no key and no
+  SDK handle. With an empty cache `build_investigator` returns `None` and the run is Layer 1
+  only, labelled as such on Ingest — honest, where an investigator that could only miss
+  would fill the queue with `unresolvable` verdicts that say nothing about the data.
+
+- **The cost line leads with requests, and prints zero rather than hiding.** A replayed run
+  spending nothing is a fact about that run worth stating. It is also the only thing on
+  screen that would reveal a "cached" Layer 2 quietly calling the API — the scorecard itself
+  would look identical — so a UI test asserts the line starts `Cost · 0 API request(s)`.
+
+**Surprises:**
+
+- **The replay message named only two of the three terminal states.** It read "39 matched,
+  2 escalated" and silently dropped Layer 2's six resolutions — from the one sentence a
+  presenter reads aloud, about the layer the whole pitch is built on. The run message had
+  been updated and the replay message had not. Found by clicking the button in a browser;
+  every test still passed, because the tests compared the *metrics* after a replay and
+  nothing asserted on that sentence. There is one now.
+
+- **A UI test that only checks the tier bar renders would not notice a missing colour.** The
+  new test reads the plotly spec and asserts all three colours are present *and that every
+  tier carries a non-zero count* — before this stage amber was legend-only, and §12.7 asks
+  for three colours on screen rather than three entries in a legend.
