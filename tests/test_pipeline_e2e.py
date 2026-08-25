@@ -14,6 +14,7 @@ would otherwise be invisible:
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from decimal import Decimal
 from pathlib import Path
@@ -1269,3 +1270,81 @@ def test_nothing_in_the_offline_path_can_import_the_sdk() -> None:
     verdict, resolved = result.stdout.split()
     assert verdict == "False"
     assert int(resolved) > 0, "the offline run must actually resolve something"
+
+
+# --------------------------------------------------------------------------
+# The last two things 12.6 asks for
+# --------------------------------------------------------------------------
+
+
+AMOUNT_FIELD = re.compile(
+    r"float\(\s*[^)]*\b\w*(amount|fee|gst|credit|net)\w*", re.IGNORECASE
+)
+
+
+def test_no_float_is_applied_to_a_money_field() -> None:
+    """12.6's repo-wide scan, and 11.1's build-failing grep.
+
+    `money()` refuses a float at the boundary, but only where a value
+    passes through it. A `float(credit_amount)` anywhere else silently
+    loses paise with nothing to raise - and the number keeps looking like
+    a number all the way to the scorecard.
+    """
+    offenders = []
+    for module in sorted((REPO_ROOT / "closo").rglob("*.py")):
+        for number, line in enumerate(
+            module.read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if AMOUNT_FIELD.search(line):
+                offenders.append(f"{module.name}:{number}: {line.strip()}")
+    assert not offenders, "float() applied to a money field:\n" + "\n".join(offenders)
+
+
+def test_the_money_scan_would_catch_a_real_offender() -> None:
+    """Guard the guard. A scan over a codebase that happens to contain no
+    `float(` at all passes whether or not the pattern works, which is the
+    same shape of dead test mutation testing has found in five stages."""
+    assert AMOUNT_FIELD.search("        return float(self.credit_amount)")
+    assert AMOUNT_FIELD.search("    total = float(row['fee_mdr'])")
+    assert AMOUNT_FIELD.search("x = float(net)")
+    assert not AMOUNT_FIELD.search("    ratio = float(count) / float(total)")
+
+
+def test_two_runs_write_an_identical_resolutions_table(
+    batch: GeneratedBatch, log: AuditLog
+) -> None:
+    """12.6 asks for the resolutions table to be diffed, not only the
+    scorecard. Two rows could swap their verdicts and every headline
+    number would stay put - the scorecard counts states, and both rows
+    would still be in one.
+    """
+    run(batch, seed=DEMO_SEED, audit=log, run_id="det_1",
+        investigator=cached_agent(batch))
+    run(batch, seed=DEMO_SEED, audit=log, run_id="det_2",
+        investigator=cached_agent(batch))
+
+    def rows(run_id: str) -> list[dict]:
+        return [
+            {k: v for k, v in row.items() if k != "run_id"}
+            for row in log.read_resolutions(run_id)
+        ]
+
+    assert rows("det_1") == rows("det_2")
+
+
+def test_the_resolutions_diff_would_notice_a_swap(
+    batch: GeneratedBatch, log: AuditLog
+) -> None:
+    """Guard the guard: prove the comparison is deep enough to see a
+    changed verdict, not just a changed status."""
+    run(batch, seed=DEMO_SEED, audit=log, run_id="det_3",
+        investigator=cached_agent(batch))
+    rows = log.read_resolutions("det_3")
+
+    tampered = [dict(row) for row in rows]
+    resolved = next(
+        row for row in tampered
+        if row["final_status"] == FinalStatus.AGENT_RESOLVED_VERIFIED.value
+    )
+    resolved["detail"] = {**resolved["detail"], "payment_ids": ["pay_swapped"]}
+    assert tampered != rows
