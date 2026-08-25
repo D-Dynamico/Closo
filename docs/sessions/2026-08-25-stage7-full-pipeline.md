@@ -326,3 +326,59 @@ Stage 7 marked done with what it met). 2 new tests; full suite **422 passing**.
   **mutation testing must restore from a copy taken before the mutation, never from git,
   while the working tree has uncommitted work in it.** The two ARCHITECTURE mutations in the
   same loop were fine only because a `cp` from a backup ran after the checkout.
+
+---
+
+## Stage 7 complete — exit criteria audited, not assumed — 2026-08-25
+
+**Exit (WORKFLOWS §13): "entire §12.6 green; airplane-mode run of the full pipeline
+succeeds."** Both met. 426 tests passing.
+
+Auditing §12.6 line by line rather than assuming it turned up **two requirements that had
+never been written at all**:
+
+- **The money grep-invariant** (§12.6, §11.1) — a repo-wide scan for `float(` applied to any
+  field named amount/fee/gst/credit/net. There is no `float(` anywhere in `closo/` today, so
+  the scan passes trivially — and a scan over a codebase with nothing to find passes whether
+  or not the pattern works, which is the dead-test shape found in five earlier stages. It
+  has a companion test asserting the pattern matches real offenders and spares a legitimate
+  `float(count) / float(total)`.
+
+- **The resolutions-table diff.** The determinism test compared scorecards, which count
+  states — two rows could swap their verdicts entirely and stay in the same states, leaving
+  every headline number untouched. The table is now diffed row by row, with a second test
+  proving the comparison is deep enough to see a changed payment list rather than only a
+  changed status.
+
+**Fresh clone, checked rather than claimed** (§14). Cloned into a temp directory: 426 tests
+pass with no `.env` and no `GEMINI_API_KEY`, and `scripts/real_api_run.py --offline` runs the
+full three-layer pipeline to 95.7% / 100% / zero false resolutions on 48 cache hits and zero
+requests. `api_cache.json` arrives byte-identical (sha256 matches, no CRLF), so
+`.gitattributes` covers the new file as it covers the CSVs.
+
+**Where Stage 7 leaves the project**
+
+| | Stage 6 | Stage 7 |
+|---|---|---|
+| Match rate | 83.0% | **95.7%** |
+| Verified accuracy | 100% | **100%** |
+| False resolutions | 0 | **0** |
+| False escalations | 6 (all pending Layer 2) | **0** |
+| ₹ stuck | ₹294K | **₹72K** |
+| Demo offline | Layer 1 only | **all three layers** |
+
+**Open for Stage 8 and beyond:**
+
+- **Stage 8 — the full UI.** Everything it needs already exists on `RunOutcome`
+  (`verdicts`, `verifications`, `needs_signoff`, `agent_matches`) and in the `events` table,
+  which now carries `layer2` tool calls and `layer3` checks. The drill-down should show an
+  E4: hypothesis → evidence → arithmetic → independent verification → the sign-off question.
+- **Section-number ambiguity is documentation debt.** `8.1` and `10.1` each resolve two ways;
+  both are pinned by tests now, but a deliberate renumbering pass is the real repair.
+- **Three modules still over ~300 code lines**: `generator.py` (392),
+  `layer2_investigator.py` (340), `pipeline.py` (311).
+- **The cache is a live dependency of the demo.** Change the system prompt, the opening
+  brief, the exception order or a tool's output and every key misses. The zero-misses test
+  is the alarm; re-recording costs ~48 requests.
+- The first suite run of the session failed both subprocess-based import tests and has been
+  green in every run since (a dozen or more). Still unexplained.
