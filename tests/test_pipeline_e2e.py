@@ -1142,3 +1142,130 @@ def test_cost_is_deliberately_outside_the_determinism_diff(full_card) -> None:
     stable = full_card.stable_dict()
     for key in ("tokens_used", "requests_made", "cache_hits"):
         assert key not in stable
+
+
+# --------------------------------------------------------------------------
+# Airplane mode: the committed cache (13, Stage 7 exit; 14)
+# --------------------------------------------------------------------------
+#
+# These run the real Layer 2 against real recorded model output, with no
+# key, no SDK and no network - which is the state a fresh clone is in, and
+# the state the demo room may be in. They fail loudly rather than skip if
+# the cache is missing: an untested airplane-mode claim is the one that
+# gets discovered on stage.
+
+
+def cached_agent(batch: GeneratedBatch):
+    from closo.layer2_investigator import Investigator
+    from closo.response_cache import DEMO_CACHE_PATH, JSONResponseStore, CachedLLMClient
+    from closo.tools import ToolBox
+
+    store = JSONResponseStore(DEMO_CACHE_PATH)
+    assert len(store), (
+        "the committed response cache is empty; the offline demo depends on "
+        "it (regenerate with PYTHONPATH=. python scripts/real_api_run.py)"
+    )
+    return Investigator(ToolBox(batch), CachedLLMClient(store))
+
+
+@pytest.fixture(scope="session")
+def cached_outcome(batch: GeneratedBatch):
+    return run(batch, seed=DEMO_SEED, investigator=cached_agent(batch))
+
+
+def test_the_full_pipeline_runs_offline_from_the_committed_cache(
+    cached_outcome, batch: GeneratedBatch
+) -> None:
+    """Stage 7's exit criterion, and §14's first line. Real recorded model
+    output, real Layer 2, real verifier - and nothing that could reach a
+    network."""
+    card = score_demo(cached_outcome, batch)
+    assert card.match_rate >= 0.93
+    assert card.verified_accuracy == 1.0
+    assert card.false_resolutions == 0
+    assert card.agent_verified > 0
+
+
+def test_the_cached_run_spends_no_requests(cached_outcome, batch: GeneratedBatch) -> None:
+    """Zero is the true figure, not a missing one. A replay that quietly
+    reached for the API would still produce a correct scorecard, so the
+    only thing that catches it is the count."""
+    card = score_demo(cached_outcome, batch)
+    assert card.requests_made == 0
+    assert card.tokens_used == 0
+    assert card.cache_hits > 0
+
+
+def test_the_cache_covers_every_turn_the_run_asks_for(batch: GeneratedBatch) -> None:
+    """The failure this guards is silent and specific: if the cached
+    conversations drift from the ones the pipeline now produces - a changed
+    system prompt, a reordered brief, a different tool result - every key
+    misses and the demo degrades to ten `unresolvable` verdicts while still
+    looking like it ran."""
+    agent = cached_agent(batch)
+    run(batch, seed=DEMO_SEED, investigator=agent)
+    assert agent.client.misses == 0, (
+        f"{agent.client.misses} conversation(s) were not in the cache; the "
+        "recorded run and the current pipeline have diverged"
+    )
+
+
+def test_the_cached_run_escalates_exactly_the_designed_unresolvables(
+    cached_outcome, batch: GeneratedBatch
+) -> None:
+    """On real model output, not a scripted one: E9 and E10 stay escalated,
+    and nothing else does."""
+    card = score_demo(cached_outcome, batch)
+    assert card.correct_escalations == card.escalated
+    assert card.false_escalations == 0
+
+
+def test_the_cached_run_names_its_fee_schedule_anomaly(cached_outcome) -> None:
+    """The E4 story, from a live model's own verdict: the math reproduces
+    the credit, the schedule that produced it was not the active one, and
+    the verdict is capped at probable with the question named (8.1). This
+    is the drill-down the demo shows."""
+    assert cached_outcome.needs_signoff
+    anomalies = [
+        v.schedule_anomaly for v in cached_outcome.verifications.values()
+        if v.schedule_anomaly
+    ]
+    assert anomalies
+    assert all("v1" in a and "v2" in a for a in anomalies)
+
+
+def test_the_cached_run_is_reproducible(batch: GeneratedBatch) -> None:
+    """What the cache buys that temperature 0 did not. Two live runs
+    resolved different subsets of exceptions; two cached runs cannot."""
+    first = score_demo(run(batch, seed=DEMO_SEED, investigator=cached_agent(batch)), batch)
+    second = score_demo(run(batch, seed=DEMO_SEED, investigator=cached_agent(batch)), batch)
+    assert first.stable_dict() == second.stable_dict()
+
+
+def test_nothing_in_the_offline_path_can_import_the_sdk() -> None:
+    """The airplane-mode claim, checked structurally in a clean subprocess.
+    Building the whole offline investigator must not pull in google.genai -
+    an in-process check would depend on what an earlier test imported."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; "
+        "from closo.dataset_io import load_batch; "
+        "from closo.config import DEMO_DIR; "
+        "from closo.layer2_investigator import Investigator; "
+        "from closo.response_cache import demo_client; "
+        "from closo.tools import ToolBox; "
+        "from closo.pipeline import run; "
+        "b = load_batch(DEMO_DIR); "
+        "out = run(b, investigator=Investigator(ToolBox(b), demo_client())); "
+        "print(any(m.startswith('google.genai') for m in sys.modules), "
+        "sum(1 for s in out.statuses.values() if s.value == 'AGENT_RESOLVED_VERIFIED'))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True,
+        check=True, cwd=str(REPO_ROOT),
+    )
+    verdict, resolved = result.stdout.split()
+    assert verdict == "False"
+    assert int(resolved) > 0, "the offline run must actually resolve something"

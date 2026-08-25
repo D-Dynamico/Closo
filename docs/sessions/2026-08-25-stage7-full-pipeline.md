@@ -181,3 +181,72 @@ throughput on its own. 8 new tests; full suite **409 passing**.
   run and a replay of that same run produce byte-identical reconciliation figures while
   spending different numbers of requests. What a run cost is a fact about the run, not about
   the batch, so it is asserted directly — including across a replay — rather than diffed.
+
+---
+
+## Substep 4 — the live run, cached for offline replay — 2026-08-25
+
+**Done:** `scripts/real_api_run.py` rewritten to drive `pipeline.run()` and write every
+response into `data/generated/demo/api_cache.json` (48 entries, 25 KB, committed). One live
+run on `gemini-3.5-flash-lite`, then the same run offline from the cache. 7 new tests; full
+suite **416 passing**.
+
+**Live run — every Stage 7 exit criterion met:**
+
+| | |
+|---|---|
+| Match rate | **95.7%** — 39 auto-matched + 6 agent-verified |
+| Verified accuracy | **100%** |
+| False resolutions | **0** |
+| Escalated | 2, both E10 — **zero false escalations** |
+| Requests | 48 (9 exceptions investigated, 1 skipped as already covered) |
+| Tokens / elapsed | 159,239 / 190s |
+| ₹ reconciled / stuck | 4,043,573.07 / 72,031.50 |
+
+Per class: E6 ×2 resolved and verified; E5 resolved in **one** verdict citing both legs;
+E4 ×2 resolved, verified, and capped to `probable` with the anomaly named — *"cited v1 but
+v2 was active on 2026-03-18"* and *"…on 2026-03-25"*. E9 ×2 and E10 ×2 all `unresolvable`.
+Summary in [`docs/real_api_run_2026-08-25-stage7.json`](../real_api_run_2026-08-25-stage7.json).
+
+**The offline replay is identical** — same scorecard, same statuses, same verdicts, same
+verifier results, 0 requests and 48 cache hits. The only difference anywhere is token
+counts, which are zero on a cache hit by design: replaying a response spends nothing, and
+reporting the original run's tokens again would be a claim about a request never made.
+
+**Decisions:**
+
+- **The script drives `pipeline.run()` instead of looping over exceptions itself.** A cache
+  key is a hash of the exact conversation, so the run that fills the cache has to ask the
+  same questions, in the same order, that the offline run will later ask. A second code path
+  would have produced a cache that misses on every key — and nobody would have found out
+  until the demo, because a miss degrades quietly to `unresolvable` rather than failing.
+
+- **The airplane-mode claim is now a test, not a procedure.** `test_pipeline_e2e.py` runs
+  the real Layer 2 against the recorded responses with no key and no SDK, asserts zero
+  requests, and asserts **zero cache misses** — that last one is what catches the cache
+  drifting away from a changed prompt or a reordered brief, which is otherwise silent. A
+  subprocess check confirms the whole offline path never imports `google.genai`.
+
+- **The tests fail rather than skip when the cache is missing.** An untested airplane-mode
+  claim is the one that gets discovered on stage.
+
+**Surprises:**
+
+- **The model tried to resolve an E10 and was stopped by the shape of its own verdict.** On
+  `bt_0393` it submitted `resolved` with an incomplete proposed match; the investigator
+  downgraded it to `unresolvable` before the verifier ever saw it. The escalation note says
+  so exactly — *"verdict rejected: 'resolved' but the proposed match was incomplete"*. The
+  designed-unresolvable guard held, but this is the first time a live model has actually
+  pushed on it.
+
+- **The SDK emitted `UserWarning: MALFORMED_RESPONSE is not a valid FinishReason`** on the
+  first exception, from `google/genai/_common.py`. The turn parsed fine and the exception
+  resolved, so `_from_response`'s defensive reading did its job — but it means the API
+  returns finish reasons this SDK version does not know about, and a stricter parser would
+  have died there.
+
+- **This run resolved 5 of 9 exceptions; the two Stage 6 runs resolved 3 each, and not the
+  same three.** Same model, same temperature 0, same prompt. The variance is real and is
+  exactly why the cache exists: the demo now replays a specific good run rather than hoping
+  for one. Worth saying plainly in the pitch rather than claiming determinism through
+  Layer 2.

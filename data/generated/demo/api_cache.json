@@ -1,0 +1,942 @@
+{
+  "07de8f2f93fead3e9abc9ae874545537bcbff106826360257777908d6decac5e": {
+    "text": "",
+    "tokens_used": 2447,
+    "tool_calls": [
+      {
+        "args": {
+          "utr": "HDFC900532931839"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "bank_txn_id": "bt_0353"
+        },
+        "name": "get_bank_txn"
+      }
+    ]
+  },
+  "14b9503a332a425cbf2dca620fe6adeb7480a8388e0b9ed2930220510f4d18c7": {
+    "text": "",
+    "tokens_used": 2956,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0352"
+        },
+        "name": "get_settlement"
+      }
+    ]
+  },
+  "14e9d8a47925728ee1bc9ef573d66405d2d72bacbe90a1fe22909652dc6ce55d": {
+    "text": "",
+    "tokens_used": 2587,
+    "tool_calls": [
+      {
+        "args": {
+          "bank_txn_id": "bt_0344"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {
+          "bank_txn_id": "bt_0345"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {
+          "settlement_id": "setl_0343"
+        },
+        "name": "get_settlement"
+      },
+      {
+        "args": {
+          "utr": "UTIB735158506431"
+        },
+        "name": "check_duplicate_utr"
+      }
+    ]
+  },
+  "15184f7b84f3584835ecb080c536047c1a5ecb717fff803c2188f9bf185c215d": {
+    "text": "",
+    "tokens_used": 3266,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v1",
+          "payment_ids": [
+            "pay_0326",
+            "pay_0328"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "1b3265172dc3c559be64858547e2b0334e32db114fb2421b7a94a59678b7fe85": {
+    "text": "",
+    "tokens_used": 3733,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "19331.25",
+            "gst": "40.62",
+            "mdr": "225.67",
+            "net": "19064.96"
+          },
+          "bank_txn_id": "bt_0334",
+          "confidence": "resolved",
+          "fee_schedule": "v1",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "The bank credit amount is a split payout or duplicate UTR reference.",
+              "reason": "check_duplicate_utr showed exactly one bank transaction and one settlement for this UTR, with no duplicates."
+            },
+            {
+              "hypothesis": "The settlement net amount of 19029.31 under v2 fee schedule is correct.",
+              "reason": "The actual bank credit is 19064.96, which matches the expected net under the v1 fee schedule (19064.96), not v2 (19029.31)."
+            }
+          ],
+          "hypothesis": "The settlement was computed and paid out using the superseded v1 fee schedule instead of the active v2 fee schedule, matching the bank credit amount of 19064.96 exactly.",
+          "payment_ids": [
+            "pay_0326",
+            "pay_0328"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "230d276ab69ccf0e9155487350b96c5e9688338e443c8d6e84331e5f84552653": {
+    "text": "",
+    "tokens_used": 2542,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0378"
+        },
+        "name": "get_settlement"
+      },
+      {
+        "args": {
+          "utr": "HDFC273158514936"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      },
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0375"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "3674abfee061926fce089e79b8bbf7c275947bfe1df607ea490dcc6076870189": {
+    "text": "",
+    "tokens_used": 3401,
+    "tool_calls": [
+      {
+        "args": {
+          "date_from": "2026-04-20",
+          "date_to": "2026-04-20"
+        },
+        "name": "list_settlements"
+      }
+    ]
+  },
+  "49d2b28e97db5d988764cd7e53961715c45c540b97a34ef4deb902d5a3930803": {
+    "text": "",
+    "tokens_used": 4384,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "20976.50",
+            "gst": "0.36",
+            "mdr": "2.00",
+            "net": "20974.14",
+            "rounding": "0.00"
+          },
+          "confidence": "resolved",
+          "fee_schedule": "v2",
+          "hypothesis": "Settlement setl_0379 has no matching bank credit whatsoever (no_counterpart), indicating money that genuinely never arrived from the bank.",
+          "payment_ids": [
+            "pay_0377"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "5116a405287e953ad2756e6fb3e0a011d1e4a74a8437a30aa1ce93f125ef46a3": {
+    "text": "",
+    "tokens_used": 3976,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "106621.25",
+            "gst": "201.56",
+            "mdr": "1119.77",
+            "net": "105299.92",
+            "rounding": "0.00"
+          },
+          "bank_txn_id": "bt_0344",
+          "confidence": "resolved",
+          "extra_bank_txn_ids": [
+            "bt_0345"
+          ],
+          "fee_schedule": "v2",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "The UTR duplication is a duplicated reference where two settlements share one UTR.",
+              "reason": "check_duplicate_utr shows there is only 1 settlement (setl_0343) against 2 bank credits (bt_0344, bt_0345), which proves this is a split payout rather than a shared UTR collision."
+            },
+            {
+              "hypothesis": "The split payout settlement net matches an alternative fee schedule v1.",
+              "reason": "compute_expected_settlement under v1 yields a net of 105449.62, whereas v2 yields exactly 105299.92, which matches the settlement amount and the sum of the two split credits (42119.97 + 63179.95 = 105299.92)."
+            }
+          ],
+          "hypothesis": "Settlement setl_0343 was paid out via a split payout across two bank credits (bt_0344 and bt_0345) sharing the same UTR, summing up exactly to the settlement net under fee schedule v2.",
+          "payment_ids": [
+            "pay_0338",
+            "pay_0340",
+            "pay_0342"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "51cb19942644b687c3f741b8aa9643b63428b18504080e985459d4cf91bfb079": {
+    "text": "",
+    "tokens_used": 5717,
+    "tool_calls": [
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      }
+    ]
+  },
+  "59885a2233d1f37b7be297e6343da8162c0676acde36d4147c3187f23b44b168": {
+    "text": "",
+    "tokens_used": 2861,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0335"
+        },
+        "name": "get_settlement"
+      }
+    ]
+  },
+  "5ebba72b86c0f5b12b9cb83163d6c81160529a9363d43726ce8715a9b4b4ee81": {
+    "text": "",
+    "tokens_used": 2415,
+    "tool_calls": [
+      {
+        "args": {
+          "utr": "UTIB735158506431"
+        },
+        "name": "check_duplicate_utr"
+      }
+    ]
+  },
+  "611dc2c2717883c1bc960f9c3eb36c05f82569fafbd0df2eb7dc099126f52b1f": {
+    "text": "",
+    "tokens_used": 3647,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "9982.25",
+            "gst": "2.16",
+            "mdr": "12.00",
+            "net": "9968.09"
+          },
+          "bank_txn_id": "bt_0353",
+          "confidence": "resolved",
+          "fee_schedule": "v2",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "Split payout where two credits sum to a single settlement.",
+              "reason": "check_duplicate_utr and get_bank_txn show 2 distinct settlements and 2 distinct bank credits matching the UTR, each bank credit matching the net amount of its respective settlement."
+            },
+            {
+              "hypothesis": "Duplicate UTR reference where one bank transaction is incorrectly mapped or fraudulent.",
+              "reason": "The UTR is shared between two legitimate settlements occurring on different dates (2026-03-02 and 2026-03-10), each corresponding precisely by amount and payment to its respective bank credit (bt_0351 for setl_0350 and bt_0353 for setl_0352)."
+            }
+          ],
+          "hypothesis": "Two separate settlements share a duplicated UTR reference by coincidence; bank credit bt_0353 correctly matches settlement setl_0352 for payment pay_0349 under fee schedule v2.",
+          "payment_ids": [
+            "pay_0349"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "6329c1fe511ead4a916349c3256e0757f2eb7fdccb0be03c9b4820a651ca01e7": {
+    "text": "",
+    "tokens_used": 3098,
+    "tool_calls": [
+      {
+        "args": {
+          "date_from": "2026-03-27",
+          "date_to": "2026-03-27"
+        },
+        "name": "list_settlements"
+      }
+    ]
+  },
+  "6b7096aa53d94b45e55eeb13567a3eae19bcbd90bef4177b1022cc8069b401df": {
+    "text": "",
+    "tokens_used": 3217,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0347"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "6c52b6acb5cad06ef19dde08298bf261827df3449bef8b6e148b9c5c6dbe4a8c": {
+    "text": "",
+    "tokens_used": 4047,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "23673.75",
+            "gst": "2.16",
+            "mdr": "12.00",
+            "net": "23659.59"
+          },
+          "confidence": "resolved",
+          "fee_schedule": "v2",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "Split payout across multiple bank credits.",
+              "reason": "check_duplicate_utr showed 0 bank transactions associated with the UTR."
+            },
+            {
+              "hypothesis": "Refund netted into the payout.",
+              "reason": "get_refunds returned a count of 0 for pay_0375."
+            },
+            {
+              "hypothesis": "Wrong fee schedule applied.",
+              "reason": "Both recorded and active schedules are v2, and compute_expected_settlement confirms the exact net amount under v2."
+            }
+          ],
+          "hypothesis": "Settlement setl_0378 has a UTR (HDFC273158514936) that does not exist in any bank transaction, meaning the payout was never credited by the bank.",
+          "payment_ids": [
+            "pay_0375"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "71e2fd15a58c5bd9c0f893342d8f24ff2aa6b77bfd784fb25627c0543de20ced": {
+    "text": "",
+    "tokens_used": 4004,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "72688.50",
+            "gst": "128.39",
+            "mdr": "713.28",
+            "net": "71846.83",
+            "rounding": "0.00"
+          },
+          "bank_txn_id": "bt_0336",
+          "confidence": "resolved",
+          "fee_schedule": "v1",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "Settlement was processed correctly under v2 fee schedule.",
+              "reason": "Under v2, the expected net is 71739.26 which does not match the bank credit of 71846.83."
+            },
+            {
+              "hypothesis": "The bank credit is split across multiple transactions.",
+              "reason": "check_duplicate_utr showed exactly 1 bank transaction for this UTR."
+            }
+          ],
+          "hypothesis": "The settlement setl_0335 on 2026-03-25 was incorrectly calculated using the v1 fee schedule instead of the active v2 fee schedule, and the actual bank credit matches the v1 expected net of 71846.83.",
+          "payment_ids": [
+            "pay_0330",
+            "pay_0332"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "77546ebb7df796749811a5f4e67360ad039801ba494fb303fa99b4151e52812b": {
+    "text": "",
+    "tokens_used": 3032,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0338",
+            "pay_0340",
+            "pay_0342"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "797565d4b372565c4cb8c8b355be860f6cfa9094bcc7ec543eae2782cfa686a0": {
+    "text": "",
+    "tokens_used": 2531,
+    "tool_calls": [
+      {
+        "args": {
+          "bank_txn_id": "bt_0393"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {
+          "utr": "SBIN076226838851"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "amount_max": "53044.00",
+          "amount_min": "53044.00",
+          "date_from": "2026-03-10",
+          "date_to": "2026-03-16"
+        },
+        "name": "list_settlements"
+      },
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      }
+    ]
+  },
+  "7e62bc6b79260dca625a6045814fea6ab6aeb8f96d45e537ab2e15f623ce9b52": {
+    "text": "",
+    "tokens_used": 2682,
+    "tool_calls": [
+      {
+        "args": {
+          "bank_txn_id": "bt_0353"
+        },
+        "name": "get_bank_txn"
+      }
+    ]
+  },
+  "7f7d16c8c9345c1fd60235181e45a427c58f85791262e758a7e73ec971ce2dc1": {
+    "text": "",
+    "tokens_used": 3327,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v1",
+          "payment_ids": [
+            "pay_0338",
+            "pay_0340",
+            "pay_0342"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "84c8db1789564f58f542c6b92d344fdbf5af5383a328f62eb94aea108b89a06b": {
+    "text": "",
+    "tokens_used": 3784,
+    "tool_calls": [
+      {
+        "args": {
+          "payment_id": "pay_0375"
+        },
+        "name": "get_refunds"
+      }
+    ]
+  },
+  "88ce5b5b9a75c0a57c07a8ba3c7cc96564ec3a459354260242c9db46a9d5d136": {
+    "text": "",
+    "tokens_used": 3049,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0326",
+            "pay_0328"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "890bd43b9dc0281902057d773b738ae835828c21b29d7988e19328f1d911fe48": {
+    "text": "",
+    "tokens_used": 2798,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0350"
+        },
+        "name": "get_settlement"
+      }
+    ]
+  },
+  "9acef4a2ad5e9527fd2f19abb6244d2a861fc93672cfbfd00358faaacf2d7c6d": {
+    "text": "",
+    "tokens_used": 2522,
+    "tool_calls": [
+      {
+        "args": {
+          "bank_txn_id": "bt_0392"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {
+          "utr": "KKBK784036900343"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "amount_max": "18987.50",
+          "amount_min": "18987.50",
+          "date_from": "2026-03-09",
+          "date_to": "2026-03-11"
+        },
+        "name": "list_settlements"
+      }
+    ]
+  },
+  "9cd88cd6243bf96ef0bc94e14f75de7babd6d0e2af87483be2c913e2b8131316": {
+    "text": "",
+    "tokens_used": 2687,
+    "tool_calls": []
+  },
+  "9eeb6064c7616f581a7b0b7c583f4df8ea5ae6cec872c319d1913bbe63ceb2b4": {
+    "text": "",
+    "tokens_used": 2469,
+    "tool_calls": [
+      {
+        "args": {
+          "utr": "ICIC965137098593"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "bank_txn_id": "bt_0334"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      }
+    ]
+  },
+  "a22c382c90bbeace4fe1d6c60b9925d93ef8b60ed29890381db8092413101512": {
+    "text": "",
+    "tokens_used": 3265,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0349"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "a2fdbdb867288bc6fd158278a4d90300cc422cbb7ea1d57495dfb4b9e99e4e2d": {
+    "text": "",
+    "tokens_used": 5580,
+    "tool_calls": [
+      {
+        "args": {
+          "date_from": "2026-03-09",
+          "date_to": "2026-03-11"
+        },
+        "name": "list_settlements"
+      }
+    ]
+  },
+  "ad4432a1da382b6618101f50e19482c09f29425d6822362418b94c6a72514431": {
+    "text": "",
+    "tokens_used": 2906,
+    "tool_calls": [
+      {
+        "args": {
+          "amount_max": "53044.00",
+          "amount_min": "53044.00",
+          "date_from": "2026-03-09",
+          "date_to": "2026-03-16"
+        },
+        "name": "list_payments"
+      }
+    ]
+  },
+  "adf9c6a92a058eb6ba1b14af18ff3dce57d541319cdd724f84b3f1f219abc284": {
+    "text": "",
+    "tokens_used": 3270,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0330",
+            "pay_0332"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "b2c214428b38e3be63459eff47e1f475fc64b731e21ed707419c741b58337b3c": {
+    "text": "",
+    "tokens_used": 2685,
+    "tool_calls": [
+      {
+        "args": {
+          "bank_txn_id": "bt_0351"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {
+          "settlement_id": "setl_0350"
+        },
+        "name": "get_settlement"
+      },
+      {
+        "args": {
+          "settlement_id": "setl_0352"
+        },
+        "name": "get_settlement"
+      }
+    ]
+  },
+  "b730b5a98d3178c8dff32745422b9b86751f9cf7321c935aa9fd4adf46e2c578": {
+    "text": "",
+    "tokens_used": 3268,
+    "tool_calls": [
+      {
+        "args": {
+          "date_from": "2026-03-27",
+          "date_to": "2026-03-27"
+        },
+        "name": "list_payments"
+      }
+    ]
+  },
+  "b99a3178d2c32c86768e9d0185f679f6afde37133be69828d6b2529394c5a494": {
+    "text": "",
+    "tokens_used": 2861,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0333"
+        },
+        "name": "get_settlement"
+      }
+    ]
+  },
+  "bcb70ec05578a930c9331476b74c32f29e87d2180a4a5f19e3c77c33c88dbfa8": {
+    "text": "",
+    "tokens_used": 2976,
+    "tool_calls": [
+      {
+        "args": {
+          "amount_max": "20976.50",
+          "amount_min": "20976.50",
+          "date_from": "2026-04-19",
+          "date_to": "2026-04-21"
+        },
+        "name": "list_payments"
+      },
+      {
+        "args": {
+          "payment_id": "pay_0377"
+        },
+        "name": "get_payment"
+      },
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0377"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "c4764352fdcb86b4faea0d15e9f73fa1a07aa935083f52221394e887c926ef66": {
+    "text": "",
+    "tokens_used": 3607,
+    "tool_calls": [
+      {
+        "args": {
+          "arithmetic": {
+            "gross": "15769.50",
+            "gst": "0.36",
+            "mdr": "2.00",
+            "net": "15767.14"
+          },
+          "bank_txn_id": "bt_0351",
+          "confidence": "resolved",
+          "fee_schedule": "v2",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "Split payout where two bank credits sum to a single settlement.",
+              "reason": "check_duplicate_utr and bank transactions show 2 bank credits and 2 settlements sharing the same UTR, but each bank credit exactly matches the net amount of its respective settlement independently (bt_0351 matches setl_0350, and bt_0353 matches setl_0352)."
+            }
+          ],
+          "hypothesis": "Duplicated UTR reference where two distinct settlements accidentally share the same UTR string, and each bank credit uniquely matches one settlement by amount.",
+          "payment_ids": [
+            "pay_0347"
+          ]
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "c4cc61aaeeef255eceadd6ade84a39fd93485cdf47adfbe77590e1c99b23c9cf": {
+    "text": "",
+    "tokens_used": 3024,
+    "tool_calls": [
+      {
+        "args": {
+          "confidence": "resolved",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "It is a settlement payout with a typo in the UTR or matching error.",
+              "reason": "check_duplicate_utr and list_settlements found no settlements matching this UTR or amount on or around the value date."
+            },
+            {
+              "hypothesis": "It is a customer refund or payment refund related to our gateway payments.",
+              "reason": "The narration says VENDOR REFUND and list_payments for this amount / list_settlements yielded no records."
+            }
+          ],
+          "hypothesis": "The bank transaction bt_0393 is explicitly labeled as a VENDOR REFUND and does not correspond to any settlement or payment in our system, so it is an external credit rather than a settlement payout."
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "c56b9af3ac289ca6b436c704d553667e3bee7e1052335de99bc083c2a019d217": {
+    "text": "",
+    "tokens_used": 3122,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0347"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "c6316132d563803c37eda8346607d94c8a1dbfadb39aad8d74a9e99eb587ddfc": {
+    "text": "",
+    "tokens_used": 6108,
+    "tool_calls": [
+      {
+        "args": {
+          "confidence": "unresolvable",
+          "hypotheses_rejected": [
+            {
+              "hypothesis": "The bank credit corresponds to a settlement via UTR matching.",
+              "reason": "check_duplicate_utr and list_settlements confirm no settlement carries this UTR."
+            },
+            {
+              "hypothesis": "The amount corresponds to a payment or settlement fee adjustment.",
+              "reason": "No payments match the credit amount or can be combined to produce this value via fee schedules."
+            }
+          ],
+          "hypothesis": "The unmatched credit bt_0392 has a narration indicating a VENDOR REFUND with no matching internal settlement or payment record in the system, and cannot be reconciled."
+        },
+        "name": "submit_verdict"
+      }
+    ]
+  },
+  "d20002c92763a3df0a62f5677fcbf13739f0e570acb72b850cb3f59b5e31689c": {
+    "text": "",
+    "tokens_used": 5982,
+    "tool_calls": [
+      {
+        "args": {
+          "amount_max": "18987.50",
+          "amount_min": "18987.50"
+        },
+        "name": "list_payments"
+      }
+    ]
+  },
+  "d675c29b7e8c1856ae5ac7a9eb219893e4ba43a1bf95efe0977aef5fff23b8d3": {
+    "text": "",
+    "tokens_used": 2448,
+    "tool_calls": [
+      {
+        "args": {
+          "utr": "HDFC900532931839"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "bank_txn_id": "bt_0351"
+        },
+        "name": "get_bank_txn"
+      }
+    ]
+  },
+  "e0ec2e44d36e0308e0019b80960b354f91cebec572dfab2aad73367b1c181378": {
+    "text": "",
+    "tokens_used": 2554,
+    "tool_calls": [
+      {
+        "args": {
+          "settlement_id": "setl_0379"
+        },
+        "name": "get_settlement"
+      },
+      {
+        "args": {
+          "utr": "KKBK998094024455"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "payment_id": "pay_0377"
+        },
+        "name": "get_refunds"
+      },
+      {
+        "args": {
+          "fee_schedule": "v1",
+          "payment_ids": [
+            "pay_0377"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "ec0b07a267864f9ae1fb710c355a2e324400d1295bb17e9d2a1c4a3c05712d0e": {
+    "text": "",
+    "tokens_used": 2469,
+    "tool_calls": [
+      {
+        "args": {
+          "utr": "UTIB461200471138"
+        },
+        "name": "check_duplicate_utr"
+      },
+      {
+        "args": {
+          "bank_txn_id": "bt_0336"
+        },
+        "name": "get_bank_txn"
+      },
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      }
+    ]
+  },
+  "ec43fcee6a70a69e8b978b94c1d7758cf75dff0c3c650203303feee8f08efee5": {
+    "text": "",
+    "tokens_used": 3074,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v2",
+          "payment_ids": [
+            "pay_0349"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "f59d885583da11f07b01d99b702bf8a117201b9bbd56052ae40ec467af10aff6": {
+    "text": "",
+    "tokens_used": 3050,
+    "tool_calls": [
+      {
+        "args": {
+          "fee_schedule": "v1",
+          "payment_ids": [
+            "pay_0330",
+            "pay_0332"
+          ]
+        },
+        "name": "compute_expected_settlement"
+      }
+    ]
+  },
+  "f6c254aeb3d81adff92ec02f9bc87470fee0f0e00259740308bd86b750c88f88": {
+    "text": "",
+    "tokens_used": 2644,
+    "tool_calls": [
+      {
+        "args": {
+          "date_from": "2026-03-05",
+          "date_to": "2026-03-10"
+        },
+        "name": "list_payments"
+      }
+    ]
+  },
+  "f779c6a65fff1d062c4ca5c7ad10d6ea2b43f497a248f5c17069d6753f038098": {
+    "text": "",
+    "tokens_used": 3708,
+    "tool_calls": [
+      {
+        "args": {
+          "payment_id": "pay_0330"
+        },
+        "name": "get_refunds"
+      }
+    ]
+  },
+  "fc871d716b054f1a81d9f84a45f8d68b06485c1e5f17194accfb76d2f9961372": {
+    "text": "",
+    "tokens_used": 3459,
+    "tool_calls": [
+      {
+        "args": {},
+        "name": "get_fee_schedules"
+      }
+    ]
+  }
+}

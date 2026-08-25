@@ -1,0 +1,259 @@
+{
+  "date": "2026-08-25",
+  "elapsed_seconds": 189.5,
+  "escalated": {
+    "bt_0392": "no_utr_match: agent could not resolve: The unmatched credit bt_0392 has a narration indicating a VENDOR REFUND with no matching internal settlement or payment record in the system, and cannot be reconciled.",
+    "bt_0393": "no_utr_match: agent could not resolve: verdict rejected: 'resolved' but the proposed match was incomplete"
+  },
+  "exceptions_investigated": 9,
+  "exceptions_skipped_as_already_covered": 1,
+  "model": "gemini-3.5-flash-lite",
+  "offline_replay": {
+    "cache_hits": 48,
+    "requests_spent": 0,
+    "scorecard_identical_to_live": true,
+    "statuses_identical_to_live": true,
+    "verdicts_identical_to_live_apart_from_token_counts": true
+  },
+  "requests_spent": 48,
+  "results": [
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0351"
+      ],
+      "effective_confidence": "resolved",
+      "error_class": "E6",
+      "exception_id": "EX-001",
+      "fee_schedule": "v2",
+      "hypothesis": "Duplicated UTR reference where two distinct settlements accidentally share the same UTR string, and each bank credit uniquely matches one settlement by amount.",
+      "needs_human_signoff": false,
+      "payment_ids": [
+        "pay_0347"
+      ],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 23565,
+      "verified": true
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0353"
+      ],
+      "effective_confidence": "resolved",
+      "error_class": "E6",
+      "exception_id": "EX-002",
+      "fee_schedule": "v2",
+      "hypothesis": "Two separate settlements share a duplicated UTR reference by coincidence; bank credit bt_0353 correctly matches settlement setl_0352 for payment pay_0349 under fee schedule v2.",
+      "needs_human_signoff": false,
+      "payment_ids": [
+        "pay_0349"
+      ],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 15070,
+      "verified": true
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0344",
+        "bt_0345"
+      ],
+      "effective_confidence": "resolved",
+      "error_class": "E5",
+      "exception_id": "EX-003",
+      "fee_schedule": "v2",
+      "hypothesis": "Settlement setl_0343 was paid out via a split payout across two bank credits (bt_0344 and bt_0345) sharing the same UTR, summing up exactly to the settlement net under fee schedule v2.",
+      "needs_human_signoff": false,
+      "payment_ids": [
+        "pay_0338",
+        "pay_0340",
+        "pay_0342"
+      ],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 15337,
+      "verified": true
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0334"
+      ],
+      "effective_confidence": "probable",
+      "error_class": "E4",
+      "exception_id": "EX-005",
+      "fee_schedule": "v1",
+      "hypothesis": "The settlement was computed and paid out using the superseded v1 fee schedule instead of the active v2 fee schedule, matching the bank credit amount of 19064.96 exactly.",
+      "needs_human_signoff": true,
+      "payment_ids": [
+        "pay_0326",
+        "pay_0328"
+      ],
+      "rejection_reason": null,
+      "schedule_anomaly": "cited v1 but v2 was active on 2026-03-18",
+      "tokens_used": 15378,
+      "verified": true
+    },
+    {
+      "confidence": "resolved",
+      "credits_covered": [
+        "bt_0336"
+      ],
+      "effective_confidence": "probable",
+      "error_class": "E4",
+      "exception_id": "EX-006",
+      "fee_schedule": "v1",
+      "hypothesis": "The settlement setl_0335 on 2026-03-25 was incorrectly calculated using the v1 fee schedule instead of the active v2 fee schedule, and the actual bank credit matches the v1 expected net of 71846.83.",
+      "needs_human_signoff": true,
+      "payment_ids": [
+        "pay_0330",
+        "pay_0332"
+      ],
+      "rejection_reason": null,
+      "schedule_anomaly": "cited v1 but v2 was active on 2026-03-25",
+      "tokens_used": 22821,
+      "verified": true
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "effective_confidence": "unresolvable",
+      "error_class": null,
+      "exception_id": "EX-007",
+      "fee_schedule": null,
+      "hypothesis": "The unmatched credit bt_0392 has a narration indicating a VENDOR REFUND with no matching internal settlement or payment record in the system, and cannot be reconciled.",
+      "needs_human_signoff": false,
+      "payment_ids": [],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 28553,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "effective_confidence": "unresolvable",
+      "error_class": null,
+      "exception_id": "EX-008",
+      "fee_schedule": null,
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "needs_human_signoff": false,
+      "payment_ids": [],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 8461,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "effective_confidence": "unresolvable",
+      "error_class": null,
+      "exception_id": "EX-009",
+      "fee_schedule": null,
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "needs_human_signoff": false,
+      "payment_ids": [],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 16739,
+      "verified": false
+    },
+    {
+      "confidence": "unresolvable",
+      "credits_covered": [],
+      "effective_confidence": "unresolvable",
+      "error_class": null,
+      "exception_id": "EX-010",
+      "fee_schedule": null,
+      "hypothesis": "verdict rejected: 'resolved' but the proposed match was incomplete",
+      "needs_human_signoff": false,
+      "payment_ids": [],
+      "rejection_reason": null,
+      "schedule_anomaly": null,
+      "tokens_used": 13315,
+      "verified": false
+    }
+  ],
+  "run": "Stage 7 - full pipeline, live model, responses cached for offline replay",
+  "scorecard": {
+    "agent_verified": 6,
+    "auto_matched": 39,
+    "awaiting_signoff": 2,
+    "correct_escalations": 2,
+    "correct_resolutions": 45,
+    "escalated": 2,
+    "false_escalations": 0,
+    "false_resolutions": 0,
+    "incorrect_resolutions": 0,
+    "match_rate": 0.957447,
+    "money_awaiting_signoff": "90911.79",
+    "money_reconciled": "4043573.07",
+    "money_stuck": "72031.50",
+    "money_total": "4115604.57",
+    "pending_investigation": 0,
+    "seed": 42,
+    "taxonomy": {
+      "E1": {
+        "agent_verified": 0,
+        "auto_matched": 26,
+        "escalated": 0,
+        "total": 26
+      },
+      "E10": {
+        "agent_verified": 0,
+        "auto_matched": 0,
+        "escalated": 2,
+        "total": 2
+      },
+      "E2": {
+        "agent_verified": 0,
+        "auto_matched": 4,
+        "escalated": 0,
+        "total": 4
+      },
+      "E3": {
+        "agent_verified": 0,
+        "auto_matched": 5,
+        "escalated": 0,
+        "total": 5
+      },
+      "E4": {
+        "agent_verified": 2,
+        "auto_matched": 0,
+        "escalated": 0,
+        "total": 2
+      },
+      "E5": {
+        "agent_verified": 2,
+        "auto_matched": 0,
+        "escalated": 0,
+        "total": 2
+      },
+      "E6": {
+        "agent_verified": 2,
+        "auto_matched": 0,
+        "escalated": 0,
+        "total": 2
+      },
+      "E7": {
+        "agent_verified": 0,
+        "auto_matched": 2,
+        "escalated": 0,
+        "total": 2
+      },
+      "E8": {
+        "agent_verified": 0,
+        "auto_matched": 2,
+        "escalated": 0,
+        "total": 2
+      }
+    },
+    "total_bank_txns": 47,
+    "verified_accuracy": 1.0
+  },
+  "tokens_used": 159239
+}
