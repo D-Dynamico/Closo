@@ -123,8 +123,8 @@ class RequestBudget:
         self.rpm_limit = rpm_limit
         self.requests_made = 0
         self._lock = threading.Lock()
-        self._window_start = time.monotonic()
-        self._window_count = 0
+        self._min_interval = 60.0 / max(rpm_limit, 1)
+        self._last_request = 0.0
 
     @property
     def remaining(self) -> int:
@@ -143,18 +143,18 @@ class RequestBudget:
                     f"daily request budget of {self.rpd_limit} is spent"
                 )
 
-            elapsed = time.monotonic() - self._window_start
-            if elapsed >= 60.0:
-                self._window_start = time.monotonic()
-                self._window_count = 0
-            elif self._window_count >= self.rpm_limit:
-                wait = 60.0 - elapsed
+            # Even spacing rather than a fixed window. A fixed window permits
+            # a burst of `rpm_limit` at the end of one minute and the same
+            # again at the start of the next, which is twice the rate over
+            # the boundary - the first live run earned a wall of 429s that
+            # way and four exceptions failed on rate limiting rather than on
+            # anything to do with reconciliation.
+            wait = self._last_request + self._min_interval - time.monotonic()
+            if wait > 0:
                 time.sleep(wait)
-                self._window_start = time.monotonic()
-                self._window_count = 0
 
+            self._last_request = time.monotonic()
             self.requests_made += 1
-            self._window_count += 1
 
 
 # --------------------------------------------------------------------------

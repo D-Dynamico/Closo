@@ -208,20 +208,49 @@ def test_empty_response_is_representable() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_gemini_client_without_a_key_explains_the_fix() -> None:
+def test_gemini_client_without_a_key_explains_the_fix(monkeypatch) -> None:
     """A missing key is the single most likely first-run failure, so the
-    message names the file, the URL and the offline alternative."""
+    message names the file, the URL and the offline alternative.
+
+    The module constant is patched rather than the argument: an earlier
+    version passed an empty string, which is falsy and therefore fell back
+    to the real key. That made the test pass on a machine with no key and
+    silently stop testing anything the moment one was configured.
+    """
+    import closo.llm_client as module
+
+    monkeypatch.setattr(module, "GEMINI_API_KEY", None)
     with pytest.raises(RuntimeError) as exc:
-        GeminiClient(api_key=None if not _key_present() else "")
+        GeminiClient(api_key=None)
     message = str(exc.value)
     assert "GEMINI_API_KEY" in message
     assert "DEMO_MODE" in message
 
 
-def _key_present() -> bool:
-    from closo.config import GEMINI_API_KEY
+def test_requests_are_paced_evenly_not_in_bursts() -> None:
+    """A fixed window allows `rpm_limit` at the end of one minute and the
+    same again at the start of the next - twice the rate across the
+    boundary. The first live run earned a wall of 429s exactly that way,
+    and four exceptions failed on rate limiting rather than on anything to
+    do with reconciliation.
+    """
+    budget = RequestBudget(rpd_limit=100, rpm_limit=15)
+    assert budget._min_interval == pytest.approx(4.0)
 
-    return bool(GEMINI_API_KEY)
+    slept: list[float] = []
+    import closo.llm_client as module
+
+    original_sleep = module.time.sleep
+    module.time.sleep = slept.append  # type: ignore[assignment]
+    try:
+        budget.spend()
+        budget.spend()
+    finally:
+        module.time.sleep = original_sleep  # type: ignore[assignment]
+
+    assert slept and slept[0] > 3.0, (
+        "the second request must wait a full slot rather than fire immediately"
+    )
 
 
 # --------------------------------------------------------------------------
