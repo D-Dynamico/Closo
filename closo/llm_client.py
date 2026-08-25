@@ -26,7 +26,7 @@ import json
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol, Sequence, runtime_checkable
 
 from closo.config import (
     GEMINI_API_KEY,
@@ -34,15 +34,19 @@ from closo.config import (
     GEMINI_RPD_LIMIT,
     GEMINI_RPM_LIMIT,
 )
+from closo.errors import QuotaExhausted
 
 
-class QuotaExhausted(RuntimeError):
-    """Raised when the run has spent its request budget.
-
-    The investigator catches this and marks the remaining exceptions
-    unresolvable rather than letting the batch die. A quota wall must
-    degrade a run honestly, never truncate it silently (7.4).
-    """
+#: ``QuotaExhausted`` is imported above rather than defined here, and
+#: re-exported so ``from closo.llm_client import QuotaExhausted`` keeps
+#: working. It lives in :mod:`closo.errors` because the pipeline has to
+#: handle a quota wall - deciding what becomes of the exceptions after it -
+#: without importing this module, which a test enforces (11.3).
+__all__ = [
+    "QuotaExhausted", "ToolCall", "LLMResponse", "LLMClient", "RequestBudget",
+    "cache_key", "to_payload", "from_payload", "ResponseStore",
+    "MockLLMClient", "GeminiClient",
+]
 
 
 @dataclass
@@ -180,6 +184,55 @@ def cache_key(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def to_payload(response: LLMResponse) -> dict[str, Any]:
+    """Render a response as plain JSON-safe data for a store.
+
+    Token count is kept because a cached run should be able to report what
+    the original run actually cost, even though serving the reply again
+    costs nothing (see ``from_payload``).
+    """
+    return {
+        "text": response.text,
+        "tool_calls": [{"name": c.name, "args": dict(c.args)} for c in response.tool_calls],
+        "tokens_used": response.tokens_used,
+    }
+
+
+def from_payload(payload: dict[str, Any]) -> LLMResponse:
+    """Rebuild a response from stored data.
+
+    ``tokens_used`` comes back as zero and ``from_cache`` as True. A cache
+    hit spent nothing, and counting the original request's tokens again
+    would make cost-per-record on the scorecard a claim about a request
+    that was never made. The stored figure is still there for anyone
+    reporting on the run that paid for it.
+    """
+    return LLMResponse(
+        text=str(payload.get("text", "")),
+        tool_calls=[
+            ToolCall(name=str(c["name"]), args=dict(c.get("args") or {}))
+            for c in payload.get("tool_calls") or []
+        ],
+        tokens_used=0,
+        from_cache=True,
+    )
+
+
+@runtime_checkable
+class ResponseStore(Protocol):
+    """Somewhere responses survive between processes.
+
+    Deliberately the shape :class:`closo.audit.AuditLog` already has, so
+    the ``api_cache`` table backs this with no adapter. A store is optional
+    everywhere: without one the client still caches in memory, it just
+    forgets at process exit.
+    """
+
+    def cache_get(self, cache_key: str) -> dict | None: ...
+
+    def cache_put(self, cache_key: str, response: dict) -> None: ...
+
+
 # --------------------------------------------------------------------------
 # Mock client
 # --------------------------------------------------------------------------
@@ -227,7 +280,15 @@ class MockLLMClient:
 
 
 class GeminiClient:
-    """Real Gemini client, behind the budget guard and an in-memory cache.
+    """Real Gemini client, behind the budget guard and two caches.
+
+    An in-memory cache serves repeats within a process. An optional
+    :class:`ResponseStore` - the SQLite ``api_cache`` table, or the
+    committed JSON file beside the demo dataset - serves repeats across
+    processes, which is what lets a demo replay offline from answers an
+    earlier run already paid for (7.3). Both are consulted **before** the
+    budget guard: replaying costs no request, and counting one would
+    misreport the day's quota.
 
     The SDK import is deferred to construction time on purpose. Importing
     this module must stay cheap and side-effect free so the no-LLM-import
@@ -239,6 +300,7 @@ class GeminiClient:
         model: str = GEMINI_MODEL,
         api_key: str | None = None,
         budget: RequestBudget | None = None,
+        store: ResponseStore | None = None,
     ) -> None:
         key = api_key or GEMINI_API_KEY
         if not key:
@@ -256,6 +318,11 @@ class GeminiClient:
         self.budget = budget or RequestBudget()
         self._client = genai.Client(api_key=key)
         self._cache: dict[str, LLMResponse] = {}
+        #: Optional durable cache. Every reply is written here as it
+        #: arrives, so the demo can be replayed offline from responses a
+        #: live run already paid for (7.3).
+        self.store = store
+        self.cache_hits = 0
 
     def generate(
         self,
@@ -272,6 +339,7 @@ class GeminiClient:
         key = cache_key(system_prompt, messages, force_tool)
         if key in self._cache:
             cached = self._cache[key]
+            self.cache_hits += 1
             return LLMResponse(
                 text=cached.text,
                 tool_calls=list(cached.tool_calls),
@@ -279,9 +347,22 @@ class GeminiClient:
                 from_cache=True,
             )
 
+        if self.store is not None:
+            stored = self.store.cache_get(key)
+            if stored is not None:
+                # A reply this key already paid for, from a previous
+                # process. Checked before the budget is touched: serving it
+                # costs no request, which is the entire point of the store.
+                self.cache_hits += 1
+                response = from_payload(stored)
+                self._cache[key] = response
+                return response
+
         self.budget.spend()
         raw = self._call_api(system_prompt, messages, tools, force_tool)
         self._cache[key] = raw
+        if self.store is not None:
+            self.store.cache_put(key, to_payload(raw))
         return raw
 
     def _call_api(
