@@ -156,10 +156,30 @@ class AuditLog:
             (run_id, seed, _now(), records_total, dumps(config or {})),
         )
 
-    def finish_run(self, run_id: str) -> None:
+    def finish_run(self, run_id: str, summary: dict | None = None) -> None:
+        """Close a run, optionally merging a summary into its config.
+
+        The summary rides in ``config_json`` rather than in a column of its
+        own so the schema does not have to change under a database that
+        already exists - and a replay needs it: a replayed run that could
+        not say what the original cost would report a free reconciliation
+        that was never free (9.2).
+        """
+        if summary:
+            merged = {**self.run_config(run_id), **summary}
+            self._write(
+                "UPDATE runs SET finished_at = ?, config_json = ? WHERE run_id = ?",
+                (_now(), dumps(merged), run_id),
+            )
+            return
         self._write(
             "UPDATE runs SET finished_at = ? WHERE run_id = ?", (_now(), run_id)
         )
+
+    def run_config(self, run_id: str) -> dict:
+        """The run's stored config, or an empty dict for an unknown run."""
+        meta = self.get_run(run_id)
+        return json.loads(meta["config_json"]) if meta else {}
 
     def record_event(
         self,

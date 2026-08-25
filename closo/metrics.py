@@ -70,9 +70,17 @@ class Scorecard:
     #: metric that discounts its own gaps stops being a measurement.
     pending_investigation: int = 0
 
+    #: Resolved on verified math but unverified intent (8.1) - a `probable`
+    #: verdict, or one capped there by a fee-schedule anomaly. Counted
+    #: inside agent_verified, never instead of it: the arithmetic really
+    #: was reproduced. Reported separately so nobody reads "resolved" as
+    #: "settled, nothing more to do".
+    awaiting_signoff: int = 0
+
     money_reconciled: Decimal = ZERO
     money_stuck: Decimal = ZERO
     money_total: Decimal = ZERO
+    money_awaiting_signoff: Decimal = ZERO
 
     taxonomy: dict[str, ClassBreakdown] = field(default_factory=dict)
 
@@ -125,6 +133,8 @@ class Scorecard:
             "pending_investigation": self.pending_investigation,
             "false_resolutions": self.false_resolutions,
             "correct_escalations": self.correct_escalations,
+            "awaiting_signoff": self.awaiting_signoff,
+            "money_awaiting_signoff": str(self.money_awaiting_signoff),
             "match_rate": round(self.match_rate, 6),
             "verified_accuracy": round(self.verified_accuracy, 6),
             "money_reconciled": str(self.money_reconciled),
@@ -163,7 +173,16 @@ def score(
         elapsed_seconds=outcome.elapsed_seconds,
     )
 
-    matches = {m.bank_txn_id: m for m in (outcome.layer1.matches if outcome.layer1 else [])}
+    # Both layers' claims, graded the same way. An agent resolution that
+    # was not checked against ground truth would count toward the match
+    # rate on the strength of having passed verification - and the verifier
+    # proves the arithmetic reproduces the credit, not that the credit came
+    # from those payments.
+    claims: dict[str, list[str]] = {
+        m.bank_txn_id: list(m.payment_ids)
+        for m in (outcome.layer1.matches if outcome.layer1 else [])
+    }
+    claims.update({k: list(v) for k, v in outcome.agent_matches.items()})
 
     for txn_id, status in outcome.statuses.items():
         entry = truth.get(txn_id, {})
@@ -180,6 +199,11 @@ def score(
         elif status is FinalStatus.AGENT_RESOLVED_VERIFIED:
             card.agent_verified += 1
             breakdown.agent_verified += 1
+            if txn_id in outcome.needs_signoff:
+                card.awaiting_signoff += 1
+                card.money_awaiting_signoff = money(
+                    card.money_awaiting_signoff + amount
+                )
         else:
             card.escalated += 1
             breakdown.escalated += 1
@@ -188,7 +212,7 @@ def score(
 
         if status in RESOLVED_STATES:
             card.money_reconciled = money(card.money_reconciled + amount)
-            claimed = sorted(matches[txn_id].payment_ids) if txn_id in matches else []
+            claimed = sorted(claims.get(txn_id, []))
             expected = sorted(entry.get("source_payment_ids", []))
             if claimed == expected and not designed_unresolvable:
                 card.correct_resolutions += 1

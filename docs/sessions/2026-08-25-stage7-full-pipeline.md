@@ -66,3 +66,88 @@ returning an empty response on a miss instead of raising, and buffering writes i
 flushing each put.
 
 **Open:** the pipeline itself is still Layer 1 only; nothing consumes the cache yet.
+
+---
+
+## Substep 2 — Layers 2 and 3 wired into `pipeline.run()` — 2026-08-25
+
+**Done:** `pipeline.run()` takes an optional investigator and, when given one, investigates
+every exception and verifies every verdict before anything reaches a terminal state.
+`metrics.py` now grades agent resolutions against ground truth the same way it grades
+Layer 1's. `audit.finish_run()` stores a run summary so a replay can report what the
+original cost. 30 new tests; full suite **401 passing**, still offline.
+
+**On seed 42 with a scripted-but-honest model:** 47 credits, **95.7% match rate** (39
+auto + 6 agent-verified), **100% verified accuracy**, zero false resolutions, **zero false
+escalations** — the only two escalations left are the E10 credits, which is the designed
+answer. ₹4,043,573.07 reconciled / ₹72,031.50 stuck. Two of the six agent resolutions are
+E4 and carry a sign-off flag.
+
+**Decisions:**
+
+- **The investigator is injected, never constructed.** `pipeline.py` must not import
+  `closo.llm_client` (11.3, and a test in `test_pipeline_e2e.py` enforces it). Injection
+  keeps that true and lets the caller decide what a model is: live for the script, cached
+  for the app, scripted for the tests. The pipeline's `Investigation` protocol is one
+  method wide.
+
+- **A `probable` verdict that passes verification is `AGENT_RESOLVED_VERIFIED` with a
+  sign-off flag, not a fourth state.** §8 says "PASS → AGENT_RESOLVED_VERIFIED", and the
+  Stage 1 decision already ruled that sign-off is a boolean on `Resolution`. The honesty
+  §8 also asks for is carried by reporting it: `awaiting_signoff` and
+  `money_awaiting_signoff` sit *inside* the resolved figures and are shown separately, so
+  nobody reads "resolved" as "settled, nothing more to do". This is the E4 case, and it is
+  the one the demo should drill into.
+
+- **Investigation and verification are interleaved, not run as two phases.** Exclusivity
+  has to be checked against resolutions that already passed, and a verdict covering a
+  second credit has to remove it from the queue before it is investigated again.
+
+- **The verifier starts with every payment Layer 1 already consumed marked as spent.**
+  Without it, a verdict could cite payments belonging to an auto-matched settlement and the
+  money view would count them twice — with every individual check passing.
+
+- **The pipeline refuses a verified verdict that claims a credit already resolved, or that
+  resolves a credit other than the one the exception was about.** Neither is something the
+  verifier can see: it proves the arithmetic reproduces the credit, not that this was the
+  credit anyone asked about, and it does not know what Layer 1 matched.
+
+- **A rejection reads differently from a failure to answer.** "agent proposed, verifier
+  rejected: `phantom_reference`" and "agent could not resolve: …" are different facts, and
+  §10.5 puts the first on screen as the strongest thing in the demo.
+
+- **Cost is stored in `runs.config_json` rather than a new column,** so the schema does not
+  change under a database that already exists. A replay that could not say what the
+  original spent would show a free reconciliation that was never free.
+
+- **`tests/oracle_client.py` solves each exception from the records rather than reading
+  ground truth.** Had it read the answers, "every agent resolution matches ground truth"
+  would be true by construction and would prove nothing about the pipeline under it.
+
+**Surprises:**
+
+- **Every auto-matched credit was carrying a note reading "unhandled by Layer 1".** The
+  fall-through sweep used `notes.setdefault` over *all* bank credits rather than only the
+  ones that actually fell through, so 39 of 47 rows held a statement that was false about
+  them. Nothing read a note without checking the status beside it, so nothing broke — it
+  was waiting for the first screen that did, which is Stage 8's drill-down. Found while
+  reading a smoke-test dump, not by a failing test.
+
+- **The two double-count guards each hid the other on the demo dataset.** Disabling either
+  one left the whole suite green, because on seed 42 the surviving guard caught the same
+  cases — the identical shape of failure Stage 5 found in the verifier's two most important
+  tests. Fixed with a four-record crafted batch that separates them: one settlement Layer 1
+  matches, one with no credit at all whose net equals the matched credit, and one foreign
+  credit. The second test asserts on the *rejection reason*, not merely that the verdict was
+  refused, because without the seeding the verdict still fails — on arithmetic — and a test
+  checking only "escalated" would not notice the guard had gone.
+
+- **`pipeline.py` is 311 code lines** against §11.9's ~300. Also worth recording: the
+  module sizes flagged in the last handoff were raw line counts including docstrings. By
+  code lines the real over-runs are `generator.py` (392) and `layer2_investigator.py` (340);
+  `llm_client.py` is 252 and was never over.
+
+**Verified:** 401 passing. Mutation-tested seven ways, all caught and each by the test
+written for it — dropping the credit-claim check, dropping the consumed-payment seeding,
+never skipping a covered credit, dropping agent resolutions from the metrics grading,
+never recording the sign-off flag, and forgetting agent resolutions on replay.
