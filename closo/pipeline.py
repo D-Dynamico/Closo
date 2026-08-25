@@ -279,12 +279,27 @@ def _investigate(
 
         verification = verifier.verify(verdict)
         outcome.verifications[item.exception_id] = verification
+
+        # The full structures go into the log, not just a summary of them.
+        # 9.1 makes `events` what replay mode reads, and it is the only
+        # store that can hold these at all for a settlement-side exception:
+        # E9 has no bank credit, so it has no `resolutions` row to hang a
+        # verdict on, and its investigation would vanish on replay.
+        events.append(_event(
+            ref, "verdict_recorded", exception_id=item.exception_id,
+            verdict=verdict.model_dump(mode="json"),
+        ))
         events.append(_event(
             ref, "verified", layer="layer3", exception_id=item.exception_id,
             passed=verification.passed,
             rejection_reason=verification.rejection_reason,
             effective_confidence=verification.effective_confidence,
             schedule_anomaly=verification.schedule_anomaly,
+        ))
+        events.append(_event(
+            ref, "verification_recorded", layer="layer3",
+            exception_id=item.exception_id,
+            result=verification.model_dump(mode="json"),
         ))
 
         if not verification.passed:
@@ -488,6 +503,7 @@ def replay(run_id: str, audit: AuditLog) -> RunOutcome:
             outcome.finished_at - outcome.started_at
         ).total_seconds()
     outcome.cost = RunCost.from_dict(audit.run_config(run_id).get("cost", {}))
+    _replay_investigations(outcome, audit.read_events(run_id))
 
     replayed_matches = []
     for record in audit.read_resolutions(run_id):
@@ -518,3 +534,26 @@ def replay(run_id: str, audit: AuditLog) -> RunOutcome:
         matches=replayed_matches, total_bank_txns=len(outcome.statuses)
     )
     return outcome
+
+
+def _replay_investigations(outcome: RunOutcome, events: list[dict]) -> None:
+    """Rebuild Layer 2's verdicts and Layer 3's results from the log.
+
+    Without this a replayed run carries statuses and nothing behind them:
+    the drill-down and escalation screens would render empty on the exact
+    path the demo falls back to when the network dies (10.1). The rows in
+    `resolutions` cannot supply it either - a settlement-side exception has
+    no bank credit and therefore no row - so the append-only log is both
+    the right source and the only complete one.
+    """
+    for event in events:
+        payload = event.get("payload") or {}
+        exception_id = payload.get("exception_id")
+        if not exception_id:
+            continue
+        if event["event_type"] == "verdict_recorded":
+            outcome.verdicts[exception_id] = Verdict.model_validate(payload["verdict"])
+        elif event["event_type"] == "verification_recorded":
+            outcome.verifications[exception_id] = VerifierResult.model_validate(
+                payload["result"]
+            )

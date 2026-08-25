@@ -382,3 +382,54 @@ requests. `api_cache.json` arrives byte-identical (sha256 matches, no CRLF), so
   is the alarm; re-recording costs ~48 requests.
 - The first suite run of the session failed both subprocess-based import tests and has been
   green in every run since (a dozen or more). Still unexplained.
+
+---
+
+# Stage 8 — the full UI
+
+Started 2026-08-25. Substeps 1 and 2 only this session; screens 2, 4 and 5 remain.
+
+## Substep 1 — a replayed run carries its investigation — 2026-08-25
+
+**Done:** the full verdict and the full verifier result are now written to the `events` log
+per exception, and `replay()` rebuilds `outcome.verdicts` and `outcome.verifications` from
+them. 8 new tests; full suite **434 passing**.
+
+**Why this is first:** `replay()` restored *zero* verdicts and zero verifier results. Every
+terminal state and every scorecard figure came back correctly, so nothing looked wrong — but
+Stage 8's drill-down and escalation screens read verdicts, evidence and per-check results,
+which means both screens would have rendered empty **on the exact path the demo falls back
+to when the network dies**. Building them on top of that would have hidden it behind a
+screen that looks plausible until the moment it matters.
+
+**Decisions:**
+
+- **The full structures go in `events`, not in `resolutions`.** §9.1 already makes the
+  events table what replay mode reads, and it is the only store that *can* hold these: a
+  settlement-side exception (E9) has no bank credit, so it has no `resolutions` row to hang
+  a verdict on. Two of the nine verdicts in a demo run are E9's, and they were unrecoverable
+  by construction. The summary fields on the existing `verified` event stay — they are what
+  makes a log dump readable — and the new `verdict_recorded` / `verification_recorded`
+  events carry the complete objects.
+
+- **Rebuilt through pydantic, not as raw dicts.** `Verdict.model_validate` puts the
+  arithmetic block back as `Decimal`; a dict would put a float on the one screen that claims
+  to show exact figures. A test asserts every replayed amount is still `Decimal`.
+
+**Surprises:**
+
+- **One of the new tests could not fail.** `test_a_settlement_side_verdict_survives_a_replay`
+  compared exception ids against bank-transaction ids — two disjoint namespaces — so its
+  comprehension was always empty and the assertion reduced to `9 == 9 > 0`. It passed
+  against a correct implementation and would have passed against any other. Rewritten to take
+  the settlement-side exceptions from Layer 1's own output. Then the rewrite left a dead
+  assertion behind (`not in {… for row in ()}`, an empty set comprehension), removed too.
+  **A test written to cover a subtle case is where a dead test is most likely to hide**,
+  because the shape of the code is doing the convincing rather than the assertion.
+
+**Verified:** 434 passing. Mutation-tested four ways, all caught — not restoring verdicts
+(4 failures), not restoring verifications (4), dropping the evidence trail from the recorded
+verdict (3), dropping the verifier's checklist (2).
+
+**Note:** `pipeline.py` is now 333 code lines against §11.9's ~300, up from 311. The
+Layer 2/3 orchestration is the part that would split out cleanly.
