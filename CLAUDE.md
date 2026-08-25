@@ -124,19 +124,20 @@ Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARC
   unresolvable. A run that "resolves" one has a critical bug, not a good day.
 - **Every module ≤ ~300 lines**, counting code rather than docstrings — earlier notes mixed
   the two and overstated the problem. Three exceed it: `generator.py` (392),
-  `layer2_investigator.py` (340) and `pipeline.py` (311). Flagged rather than hidden; worth
-  a split pass.
+  `layer2_investigator.py` (341) and `pipeline.py` (333), and `app/streamlit_app.py` is now
+  the largest thing in the repo. Flagged rather than hidden; worth a split pass, and the app
+  splits cleanly into `pages/`.
 - **Mutation-test anything that guards something.** Four stages running, mutating the code
   has exposed a test that could not fail — including, in Stage 5, the two tests protecting
   the project's central claim. Docs count too: renumbering a section slipped past its guard.
 
 ## Status
 
-Stages 0–7 complete. 420 tests passing, offline, with no API key. **The whole loop is
-demoable** — `streamlit run app/streamlit_app.py`, press Run reconciliation: all three
-layers run, Layer 2 replaying recorded model responses from
-`data/generated/demo/api_cache.json`. Replay rebuilds the run from the audit log. Neither
-path can reach a network; the client the app builds holds no key and no SDK handle.
+Stages 0–8 complete. 488 tests passing, offline, with no API key. **All five screens are
+live.** `streamlit run app/streamlit_app.py` → press Run reconciliation → watch the Live
+run, read the Scorecard, drill into an E4, work the escalation queue. Replay rebuilds the
+whole thing — investigation included — from the audit log. Neither path can reach a
+network: the client the app builds holds no key and no SDK handle.
 
 Seed 42, full pipeline: 47 credits, **95.7% match rate** (39 auto + 6 agent-verified),
 **100% verified accuracy**, ₹4.04M reconciled / ₹72K stuck, **zero false resolutions**,
@@ -151,11 +152,14 @@ rather than hoping for one. And **the cache key is the whole conversation**: cha
 prompt, the brief, the exception order or a tool result and every key misses, which
 degrades quietly rather than failing. A test asserts zero cache misses.
 
-Next: **Stage 8** — the full UI. Live-run streaming with `st.status` and the delayed
-verifier stamp, the drill-down (show an E4: hypothesis → evidence → arithmetic → independent
-verification → the sign-off question), and the escalation queue with rejected hypotheses
-struck through. Everything it needs is already on `RunOutcome` — `verdicts`,
-`verifications`, `needs_signoff`, `agent_matches` — and in the `events` table.
+Screens 2, 4 and 5 are built on the **audit log**, through `closo/narration.py`, not on the
+in-memory run. That is what makes a replay indistinguishable from a live run, and it is the
+only source carrying a settlement-side exception's investigation — an E9 has no bank credit,
+so it has no `resolutions` row.
+
+Next: **Stage 9** — demo polish. README quickstart and a 4-minute script, rehearse twice
+with a timer, verify fresh-clone-to-demo under 2 minutes (the clone was checked in Stage 7
+and passes). The drill-down already opens on an E4, which §13 says is the one to show.
 
 The **E4 spec conflict is resolved** — ARCHITECTURE §8.1. A verdict citing an inactive fee
 schedule has its math checked in full and is capped at `probable` with the anomaly named,

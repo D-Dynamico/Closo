@@ -23,7 +23,7 @@ are unresolvable by construction, and a run that "solves" one has a bug.
 python -m venv .venv
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt   # Linux/macOS: .venv/bin/python
 
-./.venv/Scripts/python.exe -m pytest                            # 420 tests, fully offline
+./.venv/Scripts/python.exe -m pytest                            # 488 tests, fully offline
 ./.venv/Scripts/python.exe -m streamlit run app/streamlit_app.py
 ```
 
@@ -44,6 +44,13 @@ makes airplane mode a property rather than a promise.
 Every bank transaction ends in exactly one of three states — `AUTO_MATCHED`,
 `AGENT_RESOLVED_VERIFIED`, or `ESCALATED`. There is no fourth, and a verdict that fails
 verification is never shown as resolved.
+
+Five screens: **Ingest**, **Live run** (each exception's tool calls, its verdict, and then
+the verifier as a deliberately separate step), **Scorecard**, **Exception drill-down**
+(hypothesis → what was ruled out → evidence → arithmetic → five independent checks), and the
+**Escalation queue** (what was tried, and what would unblock it). The last three are
+rebuilt from the append-only audit log, so a replay shows exactly what happened rather than
+a re-enactment of it.
 
 On seed 42, all three layers: **95.7%** of credits reconciled — 39 auto-matched by Layer 1
 and 6 resolved by the agent and verified — at **100% verified accuracy** against ground

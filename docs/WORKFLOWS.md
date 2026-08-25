@@ -60,6 +60,8 @@ E9/E10 exist so the honest exception list is non-empty BY DESIGN. A correct run 
 
 Five sidebar screens; color code is global and sacred: green `#C0DD97` = auto, amber `#FAC775` = agent+verified, red `#F09595` = escalated.
 
+Screens 2, 4 and 5 read the **audit log**, not the in-memory run, through `closo/narration.py`. That is what makes a replayed run indistinguishable from a live one, and it is the only source that carries a settlement-side exception's investigation at all — an E9 has no bank credit, so it has no `resolutions` row.
+
 1. **Ingest:** three source cards (name, record count, date range) + one primary button "Run reconciliation". Nothing else.
 2. **Live run:** Layer 1 progress with a fast counter and records/min; then exception queue where each exception is an `st.status(expanded=True)` block streaming the investigator's steps ("testing settlement-lag hypothesis… querying refunds…"), ending with a distinct, slightly delayed verifier line (✓ or ✗). The delay (300ms `time.sleep` in demo mode) is deliberate — verification must READ as a separate step.
 3. **Scorecard:** `st.columns(4)` metrics (match rate, verified accuracy, ₹ reconciled, ₹ stuck), Plotly horizontal stacked tier bar, exception taxonomy table, throughput + cost line.
@@ -121,9 +123,10 @@ Steps: wire Layer 2+3 into `pipeline.run()`, ground-truth quarantine, scorecard 
 Exit: entire §12.6 green; airplane-mode run of the full pipeline succeeds.
 *Met: §12.6 green, and the airplane-mode run is itself a test rather than a procedure. On seed 42 the full pipeline reaches 95.7% at 100% verified accuracy with zero false resolutions, escalating exactly E9 and E10.*
 
-**Stage 8 — Full UI (3h).**
+**Stage 8 — Full UI (3h). DONE 2026-08-25.**
 Steps: Live-run streaming with `st.status` + delayed verifier stamp, drill-down, escalation queue with rejected-hypotheses strikethrough, Replay-last-run button, global color code.
 Exit: §12.7 checklist passes end-to-end in airplane mode.
+*Met: all five screens live. The three new ones are built on the audit log through `closo/narration.py`, so a replayed run renders identically to a live one — including its verdicts, evidence and verifier checklists, which a replay used to drop entirely.*
 
 **Stage 9 — Demo polish (1.5h).**
 Steps: README quickstart + 4-minute demo script, pick the ONE drill-down exception to show on stage (an E4 fee-schedule case tells the best story), rehearse twice with a timer, verify fresh-clone-to-demo < 2 minutes.
