@@ -407,3 +407,61 @@ from [aistudio.google.com/apikey](https://aistudio.google.com/apikey), and one c
 - `layer2_investigator.py` is 419 lines — now the largest of four modules over §11.9's ~300.
 - Next: **Stage 7** — wire Layer 2 + 3 into `pipeline.run()`, cost metrics, cache the
   real-API responses into `api_cache` for offline replay.
+
+---
+
+## Stage 6 completion — the real-API run — 2026-08-25
+
+**Done: Stage 6 is complete.** All three exit criteria met. 347 tests passing.
+
+**Live run (`gemini-3.5-flash-lite`):** 10 exceptions, 57 requests, 181k tokens, 226s,
+no rate-limit errors. Transcript summary in `docs/real_api_run_2026-08-25.json`.
+
+| Class | Outcome |
+|---|---|
+| E4 | resolved + verified, **capped to `probable`** with anomaly *"cited v1 but v2 was active on 2026-03-25"* |
+| E5 | resolved + verified, verdict cited **both legs** so one resolution covers both credits |
+| E6 | resolved + verified |
+| E9, E10 | all escalated — **zero false resolutions** |
+
+Every verdict that passed verification cited exactly the payments ground truth says it
+should. The §8.1 fee-schedule resolution works end to end on live model output, not a
+fixture: proven math, unproven intent, handed to a human as a specific question.
+
+**Surprises — three, all found only by running it for real:**
+
+- **The key was pasted into `.env.example`, which is committed.** Caught before staging; it
+  never reached git. Moved to `.env` (gitignored) and the template restored. Worth a note:
+  the two filenames are one character apart and the wrong one is the tracked one.
+
+- **The 30s timeout and the 8-call tool budget contradicted each other.** Measured latency
+  is ~4s/request, so a full investigation needs 9 requests ≈ 36s. The timeout always fired
+  first — it was silently capping work rather than catching a stall, and one exception died
+  at 3 calls mid-investigation. **Two limits that cannot both be reached are one limit and a
+  bug.** Timeout → 90s, with a test asserting the bounds stay compatible.
+
+- **The budget guard's fixed window bursts across the minute boundary** — 15 at the end of
+  one minute and 15 at the start of the next is twice the rate. The second run took a wall
+  of 429s and 4 of 10 exceptions failed on rate limiting rather than on reconciliation.
+  Replaced with even spacing, which cannot burst by construction. **The guard written to
+  prevent quota problems was causing them.**
+
+- **The model never tried the alternate fee schedule.** Every `compute_expected_settlement`
+  call in run 1 used the recorded schedule, making E4 invisible by construction. In one case
+  it named v1 in the verdict without computing under it — and the verifier caught the
+  fabricated figures, which is the system working exactly as intended.
+
+**Also worth recording:** *temperature 0 did not produce identical results across runs.*
+Run 1 resolved 2×E6 + 1×E5; run 3 resolved 1×E6 + 1×E5 + 1×E4. Verified accuracy was 100%
+both times and no run ever produced a false resolution, but **which** exceptions get solved
+varies. The determinism guarantee holds for Layer 1 and for replay; it does not extend to
+live Layer 2 output. Stage 7's response cache is what makes a given run reproducible.
+
+**Open:**
+
+- A split settlement's second leg is re-investigated even after the first verdict cited it
+  via `extra_bank_txn_ids`. Wasted requests, and the second attempt would hit
+  `exclusivity_violation` if it succeeded. **Fix in Stage 7:** mark credits covered by a
+  passing verdict as resolved and skip them.
+- Next: **Stage 7** — wire Layers 2+3 into `pipeline.run()`, cost metrics, and cache these
+  responses into `api_cache` so the demo replays offline.

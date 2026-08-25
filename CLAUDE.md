@@ -118,16 +118,18 @@ Full detail, module map and layer contracts: **[`docs/ARCHITECTURE.md`](docs/ARC
 
 ## Status
 
-Stages 0–6 complete except one item. 345 tests passing, offline. **There is a demoable product from here
+Stages 0–6 complete. 347 tests passing, offline. **There is a demoable product from here
 on** — `streamlit run app/streamlit_app.py`, press Run reconciliation, see the Scorecard;
 Replay rebuilds it from the audit log with no network at all.
 
 Seed 42: 47 credits, 83.0% match rate, 100% verified accuracy, ₹3.82M reconciled /
 ₹294K stuck, 2 correct escalations and 6 false ones (all awaiting Layer 2).
 
-**Outstanding:** the Stage 6 real-API run. `GEMINI_API_KEY` is unset, so Layer 2 has only
-ever run against the mock. To do it: `cp .env.example .env`, add a key from
-aistudio.google.com/apikey, then run the pipeline. Expect ~100 requests against 500 RPD.
+The Stage 6 real-API run is done (2026-08-25, `docs/real_api_run_2026-08-25.json`): E4, E5
+and E6 each resolved and verified against live model output, E9/E10 all escalated, zero
+false resolutions. Re-run it with `PYTHONPATH=. python scripts/real_api_run.py` — ~57
+requests. Note that **temperature 0 does not make live Layer 2 output reproducible**; which
+exceptions get solved varies run to run, which is what Stage 7's response cache addresses.
 
 Next: **Stage 7** — wire Layers 2 and 3 into `pipeline.run()`, add cost metrics, and cache
 the real-API responses into `api_cache` so the demo replays offline.
